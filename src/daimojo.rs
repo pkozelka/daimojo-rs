@@ -1,8 +1,9 @@
 //! Convenient abstraction for daimojo interface
 
 use std::ffi::CString;
+use std::io::{Error, ErrorKind};
 use std::rc::Rc;
-use crate::daimojo_library::{DaiMojoLibrary, MOJO_Frame, MOJO_Model, PArrayOperations};
+use crate::daimojo_library::{DaiMojoLibrary, MOJO_Col, MOJO_Frame, MOJO_Model, PArrayOperations};
 
 pub struct DaiMojo {
     lib: Rc<DaiMojoLibrary>,
@@ -20,7 +21,17 @@ impl DaiMojo {
 
     pub fn pipeline(&self, file: &str) -> std::io::Result<MojoPipeline> {
         let mojo_model = self.lib.new_model(&CString::new(file)?, &CString::new("")?);
+        if self.lib.is_valid(mojo_model) == 0 {
+            // license check or something else failed, see above stderr messages
+            return Err(Error::new(ErrorKind::InvalidData, format!("Pipeline '{file}' is not valid")));
+        }
         Ok(MojoPipeline { lib: self.lib.clone(), mojo_model, })
+    }
+}
+
+impl Drop for DaiMojo {
+    fn drop(&mut self) {
+        eprintln!("Dropping library");
     }
 }
 
@@ -62,6 +73,22 @@ impl MojoPipeline {
     pub fn predict(&self, frame: &MojoFrame) {
         self.lib.predict(self.mojo_model, frame.mojo_frame);
     }
+
+    pub fn uuid(&self) -> &str {
+        self.lib.uuid(self.mojo_model).to_str()
+            .expect("bad chars")
+    }
+
+    pub fn time_created(&self) -> u64 {
+        self.lib.time_created(self.mojo_model)
+    }
+}
+
+impl Drop for MojoPipeline {
+    fn drop(&mut self) {
+        eprintln!("Dropping pipeline [UUID={}]", self.uuid());
+        self.lib.delete_model(self.mojo_model);
+    }
 }
 
 pub struct MojoFrame {
@@ -71,11 +98,32 @@ pub struct MojoFrame {
 }
 
 impl MojoFrame {
-    pub fn data(&mut self, col_name: &str) -> &mut [f32] {
-        let name = CString::new(col_name).unwrap();
-        let col = self.lib.get_col_by_name(self.mojo_frame, name.as_ptr());
+    pub fn input_mut(&mut self, col_name: &str) -> std::io::Result<&mut [f32]> {
+        let col = self.column(col_name);
         let data = self.lib.data(col);
-        unsafe { std::slice::from_raw_parts_mut(std::mem::transmute(data), self.row_count) }
+        Ok(unsafe { std::slice::from_raw_parts_mut(std::mem::transmute(data), self.row_count) })
+    }
+
+    pub fn output(&mut self, col_name: &str) -> std::io::Result<&[f32]> {
+        let col = self.column(col_name);
+        let data = self.lib.data(col);
+        Ok(unsafe { std::slice::from_raw_parts_mut(std::mem::transmute(data), self.row_count) })
+    }
+
+    fn column(&mut self, col_name: &str) -> *const MOJO_Col {
+        let name = CString::new(col_name).unwrap();
+        self.lib.get_col_by_name(self.mojo_frame, name.as_ptr())
+    }
+
+    pub fn ncol(&self) -> usize {
+        self.lib.frame_ncol(self.mojo_frame)
+    }
+}
+
+impl Drop for MojoFrame {
+    fn drop(&mut self) {
+        eprintln!("Dropping frame [@0x{:x}]", unsafe { std::mem::transmute::<*const MOJO_Frame, usize>(self.mojo_frame) });
+        self.lib.delete_frame(self.mojo_frame);
     }
 }
 
@@ -89,17 +137,21 @@ mod tests {
         let version = daimojo.version();
         println!("Library version: {version}");
         let pipeline = daimojo.pipeline("../mojo2/data/iris/pipeline.mojo")?;
+        println!("Pipeline UUID: {}", pipeline.uuid());
+        println!("Time created: {}", pipeline.time_created());
         let mut frame = pipeline.frame(1);
         // fill input columns
-        frame.data("sepal_len")[0] = 5.1;
-        frame.data("sepal_wid")[0] = 3.5;
-        frame.data("petal_len")[0] = 1.4;
-        frame.data("petal_wid")[0] = 0.2;
+        frame.input_mut("sepal_len")?[0] = 5.1;
+        frame.input_mut("sepal_wid")?[0] = 3.5;
+        frame.input_mut("petal_len")?[0] = 1.4;
+        frame.input_mut("petal_wid")?[0] = 0.2;
+        println!("ncol before predict: {}", frame.ncol());
         pipeline.predict(&frame);
+        println!("ncol after predict: {}", frame.ncol());
         // present output columns
-        let setosa = frame.data("class.Iris-setosa")[0];
-        let versicolor = frame.data("class.Iris-versicolor")[0];
-        let virginica = frame.data("class.Iris-virginica")[0];
+        let setosa = frame.output("class.Iris-setosa")?[0];
+        let versicolor = frame.output("class.Iris-versicolor")?[0];
+        let virginica = frame.output("class.Iris-virginica")?[0];
         println!("Result: {} {} {}", setosa, versicolor, virginica);
         assert_eq!(setosa, 0.43090245);
         Ok(())

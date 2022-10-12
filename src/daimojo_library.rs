@@ -144,8 +144,16 @@ impl DaiMojoLibrary {
         unsafe { self.api.MOJO_NewFrame(cols, names, count) }
     }
 
+    pub fn delete_frame(&self, frame: *const MOJO_Frame) {
+        unsafe { self.api.MOJO_DeleteFrame(frame)}
+    }
+
     pub fn get_col_by_name(&self, frame: *const MOJO_Frame, name: *const c_char) -> *const MOJO_Col {
         unsafe { self.api.MOJO_GetColByName(frame, name)}
+    }
+
+    pub fn frame_ncol(&self, frame: *const MOJO_Frame) -> usize {
+        unsafe { self.api.MOJO_FrameNcol(frame) }
     }
 
     pub fn new_col(&self, datatype: MOJO_DataType, size: usize) -> *const MOJO_Col {
@@ -155,7 +163,7 @@ impl DaiMojoLibrary {
         unsafe { self.api.MOJO_NewCol(datatype, size, data) }
     }
 
-    pub fn alloc_data(datatype: &MOJO_DataType, size: usize) -> *mut u8 {
+    fn alloc_data(datatype: &MOJO_DataType, size: usize) -> *mut u8 {
         let layout = match datatype {
             MOJO_DataType::MOJO_FLOAT => Layout::array::<f32>(size),
             MOJO_DataType::MOJO_DOUBLE => Layout::array::<f64>(size),
@@ -165,12 +173,19 @@ impl DaiMojoLibrary {
             _ => panic!("Unsupported type")
         };
         let layout = layout.expect("Invalid memory layout");
-        let data = unsafe { std::alloc::alloc_zeroed(layout) };
-        data
+        unsafe { std::alloc::alloc_zeroed(layout) }
+    }
+
+    pub fn delete_col(&self, col: *const MOJO_Col) {
+        unsafe { self.api.MOJO_DeleteCol(col) }
     }
 
     pub fn data(&self, col: *const MOJO_Col) -> *mut u8 {
         unsafe { self.api.MOJO_Data(col) }
+    }
+
+    pub fn datatype(&self, col: *const MOJO_Col) -> MOJO_DataType {
+        unsafe { self.api.MOJO_Type(col) }
     }
 }
 
