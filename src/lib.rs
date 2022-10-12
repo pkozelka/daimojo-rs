@@ -3,7 +3,9 @@
 use std::ffi::CString;
 use std::io::{Error, ErrorKind};
 use std::rc::Rc;
-use crate::daimojo_library::{DaiMojoLibrary, MOJO_Col, MOJO_Frame, MOJO_Model, PArrayOperations};
+use crate::daimojo_library::{DaiMojoLibrary, MOJO_Col, MOJO_Frame, MOJO_Model, PArrayOperations, PCharArrayOperations};
+
+mod daimojo_library;
 
 pub struct DaiMojo {
     lib: Rc<DaiMojoLibrary>,
@@ -81,6 +83,11 @@ impl MojoPipeline {
 
     pub fn time_created(&self) -> u64 {
         self.lib.time_created(self.mojo_model)
+    }
+
+    pub fn missing_values(&self) -> Vec<String> {
+        self.lib.missing_values(self.mojo_model)
+            .to_vec_string(self.lib.missing_values_num(self.mojo_model))
     }
 }
 
