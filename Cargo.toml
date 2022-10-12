@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 dlopen2 = "0.4.1"
 dlopen2_derive = "0.2.0"
+clap = { version = "4.0.14", features = ["derive"] }
