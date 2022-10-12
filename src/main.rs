@@ -1,6 +1,6 @@
 use std::ffi::CString;
 use std::path::PathBuf;
-use crate::daimojo::{DaiMojoLibrary, PCharArrayOperations};
+use crate::daimojo::{DaiMojoLibrary, PArrayOperations, PCharArrayOperations};
 
 fn main() {
     // using bindgen: https://medium.com/dwelo-r-d/using-c-libraries-in-rust-13961948c72a
@@ -22,16 +22,21 @@ fn main() {
     println!("TimeCreated: {}", lib.time_created(pipeline));
     let missing_values = lib.missing_values(pipeline).to_vec_string(lib.missing_values_num(pipeline));
     println!("Missing values>: {}", missing_values.join(", "));
-    println!("Features:");
     let icnt = lib.feature_num(pipeline);
-    for name in lib.feature_names(pipeline).to_vec_cstr(icnt) {
-        println!("* {}", name.to_string_lossy());
+    println!("Features[{icnt}]:");
+    let names = lib.feature_names(pipeline).to_vec_string(icnt);
+    let types = lib.feature_types(pipeline).to_slice(icnt);
+    for i in 0..icnt {
+        println!("* {} : {:?}", &names[i], types[i]);
     }
-    println!("Outputs:");
     let ocnt = lib.output_num(pipeline);
-    for name in lib.output_names(pipeline).to_vec_string(ocnt) {
-        println!("* {}", name);
+    println!("Outputs[{ocnt}]:");
+    let names = lib.output_names(pipeline).to_vec_string(ocnt);
+    let types = lib.output_types(pipeline).to_slice(ocnt);
+    for i in 0..ocnt {
+        println!("* {} : {:?}", &names[i], types[i]);
     }
+    //
     lib.delete_model(pipeline);
     println!("deleted");
 }
