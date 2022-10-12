@@ -154,6 +154,8 @@ mod tests {
         let virginica = frame.output("class.Iris-virginica")?[0];
         println!("Result: {} {} {}", setosa, versicolor, virginica);
         assert_eq!(setosa, 0.43090245);
+        assert_eq!(versicolor, 0.28463825583457947);
+        assert_eq!(virginica, 0.28445929288864136);
         Ok(())
     }
 }
