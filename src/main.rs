@@ -1,6 +1,6 @@
 use std::ffi::CString;
 use std::path::PathBuf;
-use crate::daimojo::{DaiMojoLibrary, PArrayOperations, PCharArrayOperations};
+use crate::daimojo_library::{DaiMojoLibrary, PArrayOperations, PCharArrayOperations};
 
 fn main() {
     // using bindgen: https://medium.com/dwelo-r-d/using-c-libraries-in-rust-13961948c72a
@@ -41,4 +41,5 @@ fn main() {
     println!("deleted");
 }
 
+mod daimojo_library;
 mod daimojo;
