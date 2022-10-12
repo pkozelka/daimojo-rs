@@ -1,3 +1,5 @@
+extern crate core;
+
 use std::ffi::CString;
 use std::path::PathBuf;
 use crate::daimojo_library::{DaiMojoLibrary, PArrayOperations, PCharArrayOperations};

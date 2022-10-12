@@ -2,6 +2,7 @@
 //!
 #![allow(non_snake_case)]
 
+use std::alloc::Layout;
 use std::os::raw::c_char;
 use dlopen2::wrapper::Container;
 use dlopen2::wrapper::WrapperApi;
@@ -23,7 +24,7 @@ pub type PCharArray = *const *const c_char;
 #[allow(dead_code)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Copy,Clone,Debug)]
 pub enum MOJO_DataType {
     MOJO_UNKNOWN = 1,
     MOJO_FLOAT = 2,
@@ -56,12 +57,12 @@ pub struct DaiMojoBindings {
     MOJO_NewFrame: unsafe extern "C" fn(cols: *const *const MOJO_Col, names: PCharArray, count: usize) -> *const MOJO_Frame,
     MOJO_DeleteFrame: unsafe extern "C" fn(frame: *const MOJO_Frame),
     MOJO_FrameNcol: unsafe extern "C" fn(frame: *const MOJO_Frame) -> usize,
-    MOJO_GetColByName: unsafe extern "C" fn(frame: *const MOJO_Frame, name: *const c_char) -> usize,
+    MOJO_GetColByName: unsafe extern "C" fn(frame: *const MOJO_Frame, name: *const c_char) -> *const MOJO_Col,
     // Column
-    MOJO_NewCol: unsafe extern "C" fn(datatype: MOJO_DataType, size: usize, data: *const ()) -> *const MOJO_Col,
+    MOJO_NewCol: unsafe extern "C" fn(datatype: MOJO_DataType, size: usize, data: *mut u8) -> *const MOJO_Col,
     MOJO_DeleteCol: unsafe extern "C" fn(col: *const MOJO_Col),
     MOJO_Type: unsafe extern "C" fn(col: *const MOJO_Col) -> MOJO_DataType,
-    MOJO_Data: unsafe extern "C" fn(col: *const MOJO_Col) -> *const (),
+    MOJO_Data: unsafe extern "C" fn(col: *const MOJO_Col) -> *mut u8,
 }
 
 pub struct DaiMojoLibrary {
@@ -137,6 +138,39 @@ impl DaiMojoLibrary {
 
     pub fn predict(&self, pipeline: *const MOJO_Model, frame: *const MOJO_Frame) {
         unsafe { self.api.MOJO_Predict(pipeline, frame) }
+    }
+
+    pub fn new_frame(&self, cols: *const *const MOJO_Col, names: PCharArray, count: usize) -> *const MOJO_Frame {
+        unsafe { self.api.MOJO_NewFrame(cols, names, count) }
+    }
+
+    pub fn get_col_by_name(&self, frame: *const MOJO_Frame, name: *const c_char) -> *const MOJO_Col {
+        unsafe { self.api.MOJO_GetColByName(frame, name)}
+    }
+
+    pub fn new_col(&self, datatype: MOJO_DataType, size: usize) -> *const MOJO_Col {
+        //TODO: Bad! the implementation should itself allocate the memory, because Rust has its own allocator
+        // and it's not integrated with the one from the library
+        let data = Self::alloc_data(&datatype, size);
+        unsafe { self.api.MOJO_NewCol(datatype, size, data) }
+    }
+
+    pub fn alloc_data(datatype: &MOJO_DataType, size: usize) -> *mut u8 {
+        let layout = match datatype {
+            MOJO_DataType::MOJO_FLOAT => Layout::array::<f32>(size),
+            MOJO_DataType::MOJO_DOUBLE => Layout::array::<f64>(size),
+            MOJO_DataType::MOJO_INT32 => Layout::array::<i32>(size),
+            MOJO_DataType::MOJO_INT64 => Layout::array::<i64>(size),
+            MOJO_DataType::MOJO_STRING => Layout::array::<*const c_char>(size),
+            _ => panic!("Unsupported type")
+        };
+        let layout = layout.expect("Invalid memory layout");
+        let data = unsafe { std::alloc::alloc_zeroed(layout) };
+        data
+    }
+
+    pub fn data(&self, col: *const MOJO_Col) -> *mut u8 {
+        unsafe { self.api.MOJO_Data(col) }
     }
 }
 
