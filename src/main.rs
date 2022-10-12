@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::path::PathBuf;
@@ -31,6 +30,9 @@ fn main() {
     // using bindgen: https://medium.com/dwelo-r-d/using-c-libraries-in-rust-13961948c72a
     // https://github.com/shepmaster/rust-ffi-omnibus + http://jakegoulding.com/rust-ffi-omnibus/
     // char ** : http://adam.younglogic.com/2019/03/accessing-c-arrays-of-string-from-rust/
+    //      https://doc.rust-lang.org/std/slice/fn.from_raw_parts_mut.html
+    //      https://stackoverflow.com/questions/48657360/change-c-array-element-via-rust-ffi
+
 
 
     // println!("DAIMOJO Version: {}", mojo_version().to_string_lossy());
@@ -76,7 +78,7 @@ fn main() {
     let outputs = charpp_to_strs(unsafe { cont.output_names(pipeline) }, ocnt);
     println!("Outputs:");
     for name in outputs {
-        println!("* {name}");
+        println!("* {}", name.to_string_lossy());
     }
 
     unsafe { cont.delete_model(pipeline) }
@@ -84,16 +86,12 @@ fn main() {
 }
 
 
-fn charpp_to_strs<'a>(charpp: *const *const c_char, count: isize) -> Vec<Cow<'a,str>> {
+fn charpp_to_strs<'a>(charpp: *const *const c_char, count: isize) -> Vec<&'a CStr> {
     let mut vec = Vec::new();
-    unsafe {
-        if charpp != ptr::null() {
-            for i in 0..count {
-                let p: *const c_char = *(charpp.offset(i as isize));
-                let name = CStr::from_ptr(p);
-                vec.push(name.to_string_lossy());
-            }
-        }
+    let slice = unsafe { std::slice::from_raw_parts( charpp, count as usize) };
+    for &p in slice {
+        let s = unsafe { CStr::from_ptr(p) };
+        vec.push(s);
     }
     vec
 }
