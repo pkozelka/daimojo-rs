@@ -1,9 +1,10 @@
 //! Convenient abstraction for daimojo interface
 
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::io::{Error, ErrorKind};
+use std::os::raw::c_char;
 use std::rc::Rc;
-use crate::daimojo_library::{DaiMojoLibrary, MOJO_Col, MOJO_Frame, MOJO_Model, PArrayOperations, PCharArrayOperations};
+use crate::daimojo_library::{DaiMojoLibrary, MOJO_Col, MOJO_DataType, MOJO_Frame, MOJO_Model, PArrayOperations, PCharArrayOperations};
 
 mod daimojo_library;
 
@@ -43,6 +44,31 @@ pub struct MojoPipeline {
 }
 
 impl MojoPipeline {
+
+    pub fn inputs(&self) -> Vec<(String, MOJO_DataType)> {
+        let count = self.lib.feature_num(self.mojo_model);
+        Self::columns(count,
+                      self.lib.feature_names(self.mojo_model).to_slice(count),
+                      self.lib.feature_types(self.mojo_model).to_slice(count))
+    }
+
+    pub fn outputs(&self) -> Vec<(String, MOJO_DataType)> {
+        let count = self.lib.output_num(self.mojo_model);
+        Self::columns(count,
+                      self.lib.output_names(self.mojo_model).to_slice(count),
+                      self.lib.output_types(self.mojo_model).to_slice(count))
+    }
+
+    fn columns(cnt: usize, names: &[*const c_char], types: &[MOJO_DataType]) -> Vec<(String, MOJO_DataType)> {
+        let mut result = Vec::new();
+        for i in 0..cnt {
+            let col_name = unsafe { CStr::from_ptr(names[i]) }.to_string_lossy().to_string();
+            let col_type = types[i];
+            result.push((col_name, col_type));
+        }
+        result
+    }
+
     /// This is a helper function that is not directly represented in the API
     pub fn frame(&self, row_count: usize) -> MojoFrame {
         let mut names = Vec::new();

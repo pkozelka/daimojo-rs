@@ -6,11 +6,12 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
-    /// Name of the person to greet
+    /// Path to the daimojo library
     #[arg(long,default_value="lib/linux_x64/libdaimojo.so")]
     lib: String,
 
-    #[arg(long,default_value="pipeline.mojo")]
+    /// Path to the pipeline
+    #[arg(long,value_name="PIPELINE",default_value="pipeline.mojo")]
     mojo: String,
 
     #[command(subcommand)]
@@ -42,25 +43,36 @@ fn main() {
 fn run() -> std::io::Result<i32> {
     let cli = Cli::parse();
 
-    println!("lib: {}", cli.lib);
     // You can check for the existence of subcommands, and if found use their
     // matches just as you would the top level cmd
     match cli.command {
         Commands::Show => {
             return show_pipeline(&cli.lib, &cli.mojo);
         }
-        Commands::Predict => {}
+        Commands::Predict => {
+            todo!()
+        }
     }
-
-    Ok(0)
 }
 
 fn show_pipeline(lib: &str, mojo: &str) -> std::io::Result<i32> {
-    println!("Opening '{lib}'");
+    println!("Opening library: '{lib}'");
     let lib = daimojo::DaiMojo::library(lib)?;
+    println!("* library version is {}", lib.version());
+    println!("Opening pipeline: '{mojo}'");
     let pipeline = lib.pipeline(mojo)?;
-    println!("UUID: {}", pipeline.uuid());
-    println!("Time created: {}", pipeline.time_created());
-    println!("Missing values: {}", pipeline.missing_values().join(", "));
+    println!("* UUID: {}", pipeline.uuid());
+    println!("* Time created: {}", pipeline.time_created());
+    println!("* Missing values: {}", pipeline.missing_values().join(", "));
+    let inputs = pipeline.inputs();
+    println!("Input features[{}]:", inputs.len());
+    for (col_name, col_type) in inputs {
+        println!("* '{col_name}': {col_type:?}");
+    }
+    let outputs = pipeline.outputs();
+    println!("Output columns[{}]:", outputs.len());
+    for (col_name, col_type) in outputs {
+        println!("* '{col_name}': {col_type:?}");
+    }
     Ok(0)
 }
