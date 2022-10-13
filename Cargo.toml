@@ -9,3 +9,5 @@ edition = "2021"
 dlopen2 = "0.4.1"
 dlopen2_derive = "0.2.0"
 clap = { version = "4.0.14", features = ["derive"] }
+log = "0.4.17"
+pretty_env_logger = "0.4.0"

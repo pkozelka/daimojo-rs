@@ -1,6 +1,7 @@
 extern crate core;
 
 use clap::{Parser, Subcommand};
+use log::LevelFilter;
 
 /// CLI for daimojo libraries
 #[derive(Parser)]
@@ -30,11 +31,11 @@ fn main() {
     match run() {
         Ok(0) => {}
         Ok(code) => {
-            eprintln!("Exiting with code={code}");
+            log::error!("Exiting with code={code}");
             std::process::exit(code);
         }
         Err(e) => {
-            eprintln!("ERROR: {e:?}");
+            log::error!("ERROR: {e:?}");
             std::process::exit(1)
         }
     }
@@ -42,6 +43,11 @@ fn main() {
 
 fn run() -> std::io::Result<i32> {
     let cli = Cli::parse();
+
+    pretty_env_logger::formatted_timed_builder()
+        .format_timestamp_millis()
+        .filter_level(LevelFilter::Trace)
+        .init();
 
     // You can check for the existence of subcommands, and if found use their
     // matches just as you would the top level cmd
@@ -56,10 +62,10 @@ fn run() -> std::io::Result<i32> {
 }
 
 fn show_pipeline(lib: &str, mojo: &str) -> std::io::Result<i32> {
-    println!("Opening library: '{lib}'");
+    log::debug!("Opening library: '{lib}'");
     let lib = daimojo::DaiMojo::library(lib)?;
-    println!("* library version is {}", lib.version());
-    println!("Opening pipeline: '{mojo}'");
+    println!("daimojo version is {}", lib.version());
+    log::debug!("Opening pipeline: '{mojo}'");
     let pipeline = lib.pipeline(mojo)?;
     println!("* UUID: {}", pipeline.uuid());
     println!("* Time created: {}", pipeline.time_created());

@@ -34,7 +34,7 @@ impl DaiMojo {
 
 impl Drop for DaiMojo {
     fn drop(&mut self) {
-        eprintln!("Dropping library");
+        log::trace!("Dropping library");
     }
 }
 
@@ -119,7 +119,7 @@ impl MojoPipeline {
 
 impl Drop for MojoPipeline {
     fn drop(&mut self) {
-        eprintln!("Dropping pipeline [UUID={}]", self.uuid());
+        log::trace!("Dropping pipeline [UUID={}]", self.uuid());
         self.lib.delete_model(self.mojo_model);
     }
 }
@@ -155,7 +155,7 @@ impl MojoFrame {
 
 impl Drop for MojoFrame {
     fn drop(&mut self) {
-        eprintln!("Dropping frame [@0x{:x}]", unsafe { std::mem::transmute::<*const MOJO_Frame, usize>(self.mojo_frame) });
+        log::trace!("Dropping frame [@0x{:x}]", unsafe { std::mem::transmute::<*const MOJO_Frame, usize>(self.mojo_frame) });
         self.lib.delete_frame(self.mojo_frame);
     }
 }
@@ -178,9 +178,9 @@ mod tests {
         frame.input_mut("sepal_wid")?[0] = 3.5;
         frame.input_mut("petal_len")?[0] = 1.4;
         frame.input_mut("petal_wid")?[0] = 0.2;
-        println!("ncol before predict: {}", frame.ncol());
+        log::trace!("ncol before predict: {}", frame.ncol());
         pipeline.predict(&frame);
-        println!("ncol after predict: {}", frame.ncol());
+        log::trace!("ncol after predict: {}", frame.ncol());
         // present output columns
         let setosa = frame.output("class.Iris-setosa")?[0];
         let versicolor = frame.output("class.Iris-versicolor")?[0];
