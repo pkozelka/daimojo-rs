@@ -1,5 +1,7 @@
 extern crate core;
 
+use std::path::PathBuf;
+use std::str::FromStr;
 use clap::{Parser, Subcommand};
 use log::LevelFilter;
 
@@ -44,6 +46,11 @@ fn main() {
 fn run() -> std::io::Result<i32> {
     let cli = Cli::parse();
 
+    // library path must always contain a directory so we canonicalize it - it's the easiest way to get its absolute path
+    let lib = PathBuf::from_str(&cli.lib).unwrap()
+        .canonicalize()?
+        .to_string_lossy()
+        .to_string();
     pretty_env_logger::formatted_timed_builder()
         .format_timestamp_millis()
         .filter_level(LevelFilter::Trace)
@@ -53,7 +60,7 @@ fn run() -> std::io::Result<i32> {
     // matches just as you would the top level cmd
     match cli.command {
         Commands::Show => {
-            return show_pipeline(&cli.lib, &cli.mojo);
+            return show_pipeline(&lib, &cli.mojo);
         }
         Commands::Predict => {
             todo!()
