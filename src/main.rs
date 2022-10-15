@@ -2,13 +2,20 @@ extern crate core;
 
 use std::path::PathBuf;
 use std::str::FromStr;
-use clap::{Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand};
 use log::LevelFilter;
 
 /// CLI for daimojo libraries
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
+    /// Logging in verbose mode (-v = DEBUG, -vv = TRACE)
+    #[arg(short, long, action = ArgAction::Count)]
+    verbose: u8,
+    /// Logging in silent mode (-s = WARN, -ss = ERROR, -sss = OFF)
+    #[arg(short, long, action = ArgAction::Count)]
+    silent: u8,
+
     /// Path to the daimojo library
     #[arg(long,default_value="lib/linux_x64/libdaimojo.so")]
     lib: String,
@@ -51,13 +58,21 @@ fn run() -> std::io::Result<i32> {
         .canonicalize()?
         .to_string_lossy()
         .to_string();
+    // setup logger
+    let level: i8 = 3 as i8 + cli.verbose as i8 - cli.silent as i8;
+    let level = match level {
+        i8::MIN..=0 => LevelFilter::Off,
+        1 => LevelFilter::Error,
+        2 => LevelFilter::Warn,
+        3 => LevelFilter::Info,
+        4 => LevelFilter::Debug,
+        5..=i8::MAX => LevelFilter::Trace,
+    };
     pretty_env_logger::formatted_timed_builder()
         .format_timestamp_millis()
-        .filter_level(LevelFilter::Trace)
+        .filter_level(level.into())
         .init();
-
-    // You can check for the existence of subcommands, and if found use their
-    // matches just as you would the top level cmd
+    // run subcommand
     match cli.command {
         Commands::Show => {
             return show_pipeline(&lib, &cli.mojo);
