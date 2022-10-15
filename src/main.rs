@@ -86,7 +86,7 @@ fn run() -> std::io::Result<i32> {
 fn show_pipeline(lib: &str, mojo: &str) -> std::io::Result<i32> {
     log::debug!("Opening library: '{lib}'");
     let lib = daimojo::DaiMojo::library(lib)?;
-    println!("daimojo version is {}", lib.version());
+    println!("Library's daimojo version is {}", lib.version());
     log::debug!("Opening pipeline: '{mojo}'");
     let pipeline = lib.pipeline(mojo)?;
     println!("* UUID: {}", pipeline.uuid());
