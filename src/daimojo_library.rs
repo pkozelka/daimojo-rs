@@ -35,9 +35,13 @@ pub enum MOJO_DataType {
 }
 
 #[derive(dlopen2_derive::WrapperApi)]
-pub struct DaiMojoBindings {
+pub struct DaiMojoVersionBindings {
     #[dlopen2_name = "MOJO_Version"]
     mojo_version: unsafe extern "C" fn() -> *const c_char,
+}
+
+#[derive(dlopen2_derive::WrapperApi)]
+pub struct DaiMojoBindings {
     // Model
     MOJO_NewModel: unsafe extern "C" fn(filename: *const c_char, tf_lib_prefix: *const c_char) -> *const MOJO_Model,
     MOJO_DeleteModel: unsafe extern "C" fn(pipeline: *const MOJO_Model),
@@ -67,20 +71,27 @@ pub struct DaiMojoBindings {
 
 pub struct DaiMojoLibrary {
     api: Container<DaiMojoBindings>,
+    version: &'static CStr
 }
 
 impl DaiMojoLibrary {
 
     pub fn open(libname: &str) -> Result<Self, std::io::Error> {
+        let version_api: Container<DaiMojoVersionBindings> = unsafe { Container::load(libname) }
+            .map_err(|e| std::io::Error::new(ErrorKind::InvalidInput, format!("{libname}: {e:?}")))?;
+        let version = unsafe { CStr::from_ptr(version_api.mojo_version()) };
+
+        if version.to_bytes()[0] != b'2' {
+            return Err(std::io::Error::new(ErrorKind::InvalidInput, format!("{libname}: Not a supported API inside version '{}'", version.to_string_lossy())))
+        }
         let container = unsafe { Container::load(libname) };
         let api = container
             .map_err(|e| std::io::Error::new(ErrorKind::InvalidInput, format!("{libname}: {e:?}")))?;
-        Ok(Self { api })
+        Ok(Self { api, version})
     }
 
     pub fn version(&self) -> &CStr {
-        let v = unsafe { self.api.mojo_version() };
-        unsafe {CStr::from_ptr(v)}
+        self.version
     }
 
     pub fn new_model(&self, filename: &CStr, tf_lib_prefix: &CStr) -> *const MOJO_Model {
