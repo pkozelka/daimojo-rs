@@ -1,6 +1,7 @@
 extern crate core;
 
 use std::path::PathBuf;
+use std::process::ExitCode;
 use std::str::FromStr;
 use clap::{ArgAction, Parser, Subcommand};
 use log::LevelFilter;
@@ -36,21 +37,24 @@ enum Commands {
     Predict,
 }
 
-fn main() {
+fn main() -> ExitCode {
     match run() {
-        Ok(0) => {}
+        Ok(0) => ExitCode::SUCCESS,
         Ok(code) => {
-            log::error!("Exiting with code={code}");
-            std::process::exit(code);
+            //TODO: I don't know why logging doesn't work here...
+            // log::error!("Exiting with code={code}");
+            eprintln!("Exiting with code={code}");
+            ExitCode::from(code)
         }
         Err(e) => {
-            log::error!("ERROR: {e:?}");
-            std::process::exit(1)
+            //TODO: I don't know why logging doesn't work here...
+            eprintln!("ERROR: {e:?}");
+            ExitCode::FAILURE
         }
     }
 }
 
-fn run() -> std::io::Result<i32> {
+fn run() -> std::io::Result<u8> {
     let cli = Cli::parse();
 
     // library path must always contain a directory so we canonicalize it - it's the easiest way to get its absolute path
@@ -83,7 +87,7 @@ fn run() -> std::io::Result<i32> {
     }
 }
 
-fn show_pipeline(lib: &str, mojo: &str) -> std::io::Result<i32> {
+fn show_pipeline(lib: &str, mojo: &str) -> std::io::Result<u8> {
     log::debug!("Opening library: '{lib}'");
     let lib = daimojo::DaiMojo::library(lib)?;
     println!("Library's daimojo version is {}", lib.version());
