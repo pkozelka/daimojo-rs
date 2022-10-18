@@ -20,36 +20,12 @@ const BATCH_SIZE: usize = 1000;
 
 pub fn cmd_predict(pipeline: &MojoPipeline, _output: Option<String>, input: Option<String>) -> std::io::Result<u8> {
     let mut frame = pipeline.frame(BATCH_SIZE);
-    let mut rdr = csv::Reader::from_path(input.unwrap())?;
-    let csv_headers = match rdr.headers() {
-        Err(e) => return Err(std::io::Error::new(ErrorKind::InvalidData, format!("Cannot read header: {e}"))),
-        Ok(headers) => headers,
-    };
-    let csv_headers = csv_headers.iter().enumerate()
-        .map(|(csv_index, col_name)| (col_name, csv_index))
-        .collect::<HashMap<&str, usize>>();
-    let mut icols = Vec::new();
-    for (col_name, data_type) in pipeline.inputs() {
-        if let Some(&csv_index) = csv_headers.get(col_name.as_str()) {
-            let ptr = frame.input_mut(&col_name).unwrap();
-            icols.push((ColumnData { data_type, array_start: ptr, current: ptr }, csv_index))
-        }
-    }
+
+    let mut importer = FrameImporter::init(&pipeline, input, &mut frame, BATCH_SIZE)?;
 
     // read csv
-    let mut total_rows = 0;
-    ColumnData::reset_current_tuple(&mut icols);
-    for record in rdr.records() {
-        let record = record?;
-        // fill mojo row
-        for (col, csv_index) in &mut icols {
-            let value = record.get(*csv_index).expect("column disappeared?");
-            col.item_from_str(value);
-        }
-        total_rows += 1;
-        //TODO: support multiple batches
-        if total_rows == BATCH_SIZE { panic!("Batch size exceeded")}
-    }
+    let total_rows = importer.import_frame()?;
+    //TODO: support multiple batches
 
     // predict
     pipeline.predict(&mut frame);
@@ -59,6 +35,53 @@ pub fn cmd_predict(pipeline: &MojoPipeline, _output: Option<String>, input: Opti
     exporter.export_frame(total_rows)?;
     //
     Ok(0)
+}
+
+struct FrameImporter {
+    rdr: csv::Reader<std::fs::File>,
+    icols: Vec<(ColumnData, usize)>,
+    batch_size: usize,
+    eof: bool,
+}
+
+impl FrameImporter {
+    pub fn init(pipeline: &MojoPipeline, input: Option<String>, frame: &mut MojoFrame, batch_size: usize) -> std::io::Result<Self> {
+        let mut rdr = csv::Reader::from_path(input.unwrap())?;
+        let csv_headers = match rdr.headers() {
+            Err(e) => return Err(std::io::Error::new(ErrorKind::InvalidData, format!("Cannot read header: {e}"))),
+            Ok(headers) => headers,
+        };
+        let csv_headers = csv_headers.iter().enumerate()
+            .map(|(csv_index, col_name)| (col_name, csv_index))
+            .collect::<HashMap<&str, usize>>();
+        let mut icols = Vec::new();
+        for (col_name, data_type) in pipeline.inputs() {
+            if let Some(&csv_index) = csv_headers.get(col_name.as_str()) {
+                let ptr = frame.input_mut(&col_name).unwrap();
+                icols.push((ColumnData { data_type, array_start: ptr, current: ptr }, csv_index))
+            }
+        }
+        Ok(Self { rdr, icols, batch_size, eof: false })
+    }
+
+    pub fn import_frame(&mut self) -> std::io::Result<usize> {
+        let mut rows = 0;
+        ColumnData::reset_current_tuple(&mut self.icols);
+        let iter = self.rdr.records();
+        for record in iter {
+            let record = record?;
+            // fill mojo row
+            for (col, csv_index) in &mut self.icols {
+                let value = record.get(*csv_index).expect("column disappeared?");
+                col.item_from_str(value);
+            }
+            rows += 1;
+            if rows == self.batch_size {
+                break
+            }
+        }
+        Ok(rows)
+    }
 }
 
 struct FrameExporter {
