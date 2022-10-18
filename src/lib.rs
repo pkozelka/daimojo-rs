@@ -131,7 +131,7 @@ pub struct MojoFrame {
 }
 
 impl MojoFrame {
-    fn column(&mut self, col_name: &str) -> Option<*const MOJO_Col> {
+    fn column(&self, col_name: &str) -> Option<*const MOJO_Col> {
         let name = CString::new(col_name).unwrap();
         let p = self.lib.get_col_by_name(self.mojo_frame, name.as_ptr());
         if p.is_null() {
@@ -146,7 +146,7 @@ impl MojoFrame {
         Some(self.lib.data(col))
     }
 
-    pub fn output(&mut self, col_name: &str) -> Option<*const u8> {
+    pub fn output(&self, col_name: &str) -> Option<*const u8> {
         let col = self.column(col_name)?;
         Some(self.lib.data(col))
     }

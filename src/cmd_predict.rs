@@ -1,7 +1,8 @@
 use std::collections::HashMap;
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Stdout};
+use csv::Writer;
 use daimojo::daimojo_library::MOJO_DataType;
-use daimojo::MojoPipeline;
+use daimojo::{MojoFrame, MojoPipeline};
 
 const MOJO_I32_NAN: i32 = i32::MAX;
 const MOJO_I64_NAN: i64 = i64::MAX;
@@ -32,7 +33,7 @@ pub fn cmd_predict(pipeline: &MojoPipeline, _output: Option<String>, input: Opti
     for (col_name, data_type) in pipeline.inputs() {
         if let Some(&csv_index) = csv_headers.get(col_name.as_str()) {
             let ptr = frame.input_mut(&col_name).unwrap();
-            icols.push(ColumnData { data_type, data: ColumnArray { ptr }, csv_index})
+            icols.push((ColumnData { data_type, data: ColumnArray { ptr } }, csv_index))
         }
     }
 
@@ -41,8 +42,8 @@ pub fn cmd_predict(pipeline: &MojoPipeline, _output: Option<String>, input: Opti
     for record in rdr.records() {
         let record = record?;
         // fill mojo row
-        for col in &mut icols {
-            let value = record.get(col.csv_index).expect("column disappeared?");
+        for (col, csv_index) in &mut icols {
+            let value = record.get(*csv_index).expect("column disappeared?");
             col.item_from_str(total_rows, value);
         }
         total_rows += 1;
@@ -54,30 +55,50 @@ pub fn cmd_predict(pipeline: &MojoPipeline, _output: Option<String>, input: Opti
     pipeline.predict(&mut frame);
 
     // output csv
-    let mut wtr = csv::Writer::from_writer(std::io::stdout());
-    let mut ocols = Vec::new();
-    for (col_name, data_type) in pipeline.outputs() {
-        wtr.write_field(&col_name)?;
-        let ptr = frame.output(&col_name).unwrap();
-        ocols.push(ColumnData { data_type, data: ColumnArray { ptr }, csv_index: 0});
-    }
-    wtr.write_record(None::<&[u8]>)?;
+    let mut exporter = FrameExporter::init(&pipeline, &frame)?;
+    exporter.export_frame(total_rows)?;
+    //
+    Ok(0)
+}
 
-    for row in 0..total_rows {
-        for col in &mut ocols {
-            let s = col.item_to_string(row);
-            wtr.write_field(s)?;
+struct FrameExporter<'a> {
+    saved_batches: usize,
+    saved_rows: usize,
+    wtr: Writer<Stdout>,
+    ocols: Vec<ColumnData<'a>>,
+}
+
+impl <'a> FrameExporter<'a> {
+    fn init(pipeline: &MojoPipeline, frame: &MojoFrame) -> std::io::Result<Self> {
+        let mut wtr = csv::Writer::from_writer(std::io::stdout());
+        let mut ocols = Vec::new();
+        for (col_name, data_type) in pipeline.outputs() {
+            wtr.write_field(&col_name)?;
+            let ptr = frame.output(&col_name).unwrap();
+            ocols.push(ColumnData { data_type, data: ColumnArray { ptr }});
         }
         wtr.write_record(None::<&[u8]>)?;
+        Ok(Self { saved_batches: 0, saved_rows:0, wtr, ocols})
     }
-    Ok(0)
+
+    fn export_frame(&mut self, rows: usize) -> std::io::Result<()> {
+        for row in 0..rows {
+            for col in &mut self.ocols {
+                let s = col.item_to_string(row);
+                self.wtr.write_field(s)?;
+            }
+            self.wtr.write_record(None::<&[u8]>)?;
+        }
+        self.saved_batches += 1;
+        self.saved_rows += rows;
+        Ok(())
+    }
 }
 
 struct ColumnData<'a> {
     data_type: MOJO_DataType,
     data: ColumnArray<'a, 10000>,
     // data: *mut u8,
-    csv_index: usize,
 }
 
 //TODO let's find something better than enum
