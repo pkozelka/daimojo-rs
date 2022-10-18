@@ -6,7 +6,7 @@ use std::os::raw::c_char;
 use std::rc::Rc;
 use crate::daimojo_library::{DaiMojoLibrary, MOJO_Col, MOJO_DataType, MOJO_Frame, MOJO_Model, PArrayOperations, PCharArrayOperations};
 
-mod daimojo_library;
+pub mod daimojo_library;
 
 pub struct DaiMojo {
     lib: Rc<DaiMojoLibrary>,
@@ -98,7 +98,7 @@ impl MojoPipeline {
         MojoFrame { lib: self.lib.clone(), mojo_frame, row_count }
     }
 
-    pub fn predict(&self, frame: &MojoFrame) {
+    pub fn predict(&self, frame: &mut MojoFrame) {
         self.lib.predict(self.mojo_model, frame.mojo_frame);
     }
 
@@ -131,21 +131,34 @@ pub struct MojoFrame {
 }
 
 impl MojoFrame {
-    pub fn input_mut(&mut self, col_name: &str) -> std::io::Result<&mut [f32]> {
-        let col = self.column(col_name);
-        let data = self.lib.data(col);
-        Ok(unsafe { std::slice::from_raw_parts_mut(std::mem::transmute(data), self.row_count) })
-    }
-
-    pub fn output(&mut self, col_name: &str) -> std::io::Result<&[f32]> {
-        let col = self.column(col_name);
-        let data = self.lib.data(col);
-        Ok(unsafe { std::slice::from_raw_parts_mut(std::mem::transmute(data), self.row_count) })
-    }
-
-    fn column(&mut self, col_name: &str) -> *const MOJO_Col {
+    fn column(&mut self, col_name: &str) -> Option<*const MOJO_Col> {
         let name = CString::new(col_name).unwrap();
-        self.lib.get_col_by_name(self.mojo_frame, name.as_ptr())
+        let p = self.lib.get_col_by_name(self.mojo_frame, name.as_ptr());
+        if p.is_null() {
+            None
+        } else {
+            Some(p)
+        }
+    }
+
+    pub fn input_mut(&mut self, col_name: &str) -> Option<*mut u8> {
+        let col = self.column(col_name)?;
+        Some(self.lib.data(col))
+    }
+
+    pub fn output(&mut self, col_name: &str) -> Option<*const u8> {
+        let col = self.column(col_name)?;
+        Some(self.lib.data(col))
+    }
+
+    pub fn input_f32_mut(&mut self, col_name: &str) -> Option<&mut [f32]> {
+        let data = self.input_mut(col_name)?;
+        Some(unsafe { std::slice::from_raw_parts_mut(std::mem::transmute(data), self.row_count) })
+    }
+
+    pub fn output_f32(&mut self, col_name: &str) -> Option<&[f32]> {
+        let data = self.output(col_name)?;
+        Some(unsafe { std::slice::from_raw_parts(std::mem::transmute(data), self.row_count) })
     }
 
     pub fn ncol(&self) -> usize {
@@ -169,22 +182,22 @@ mod tests {
         let daimojo = DaiMojo::library("lib/linux_x64/libdaimojo.so")?;
         let version = daimojo.version();
         println!("Library version: {version}");
-        let pipeline = daimojo.pipeline("../mojo2/data/iris/pipeline.mojo")?;
+        let pipeline = daimojo.pipeline("data/iris/pipeline.mojo")?;
         println!("Pipeline UUID: {}", pipeline.uuid());
         println!("Time created: {}", pipeline.time_created());
         let mut frame = pipeline.frame(1);
         // fill input columns
-        frame.input_mut("sepal_len")?[0] = 5.1;
-        frame.input_mut("sepal_wid")?[0] = 3.5;
-        frame.input_mut("petal_len")?[0] = 1.4;
-        frame.input_mut("petal_wid")?[0] = 0.2;
+        frame.input_f32_mut("sepal_len").unwrap()[0] = 5.1;
+        frame.input_f32_mut("sepal_wid").unwrap()[0] = 3.5;
+        frame.input_f32_mut("petal_len").unwrap()[0] = 1.4;
+        frame.input_f32_mut("petal_wid").unwrap()[0] = 0.2;
         log::trace!("ncol before predict: {}", frame.ncol());
-        pipeline.predict(&frame);
+        pipeline.predict(&mut frame);
         log::trace!("ncol after predict: {}", frame.ncol());
         // present output columns
-        let setosa = frame.output("class.Iris-setosa")?[0];
-        let versicolor = frame.output("class.Iris-versicolor")?[0];
-        let virginica = frame.output("class.Iris-virginica")?[0];
+        let setosa = frame.output_f32("class.Iris-setosa").unwrap()[0];
+        let versicolor = frame.output_f32("class.Iris-versicolor").unwrap()[0];
+        let virginica = frame.output_f32("class.Iris-virginica").unwrap()[0];
         println!("Result: {} {} {}", setosa, versicolor, virginica);
         assert_eq!(setosa, 0.43090245);
         assert_eq!(versicolor, 0.28463825583457947);

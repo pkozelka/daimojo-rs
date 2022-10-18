@@ -5,6 +5,7 @@ use std::process::ExitCode;
 use std::str::FromStr;
 use clap::{ArgAction, Parser, Subcommand};
 use log::LevelFilter;
+use daimojo::MojoPipeline;
 
 /// CLI for daimojo libraries
 #[derive(Parser)]
@@ -34,7 +35,12 @@ enum Commands {
     /// Show some data about the pipeline
     Show,
     /// Run prediction
-    Predict,
+    Predict {
+        #[arg(long="out")]
+        output: Option<String>,
+        //TODO later, this will probably be Vec<String>
+        input: Option<String>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -79,20 +85,17 @@ fn run() -> std::io::Result<u8> {
     // run subcommand
     match cli.command {
         Commands::Show => {
-            return show_pipeline(&lib, &cli.mojo);
+            return show_pipeline(&lib, &cli.mojo)
         }
-        Commands::Predict => {
-            todo!()
+        Commands::Predict {output, input} => {
+            let pipeline = open_pipeline(&cli.lib, &cli.mojo)?;
+            cmd_predict::cmd_predict(&pipeline, output, input)
         }
     }
 }
 
 fn show_pipeline(lib: &str, mojo: &str) -> std::io::Result<u8> {
-    log::debug!("Opening library: '{lib}'");
-    let lib = daimojo::DaiMojo::library(lib)?;
-    println!("Library's daimojo version is {}", lib.version());
-    log::debug!("Opening pipeline: '{mojo}'");
-    let pipeline = lib.pipeline(mojo)?;
+    let pipeline = open_pipeline(lib, mojo)?;
     println!("* UUID: {}", pipeline.uuid());
     println!("* Time created: {}", pipeline.time_created());
     println!("* Missing values: {}", pipeline.missing_values().join(", "));
@@ -108,3 +111,14 @@ fn show_pipeline(lib: &str, mojo: &str) -> std::io::Result<u8> {
     }
     Ok(0)
 }
+
+fn open_pipeline(lib: &str, mojo: &str) -> std::io::Result<MojoPipeline> {
+    log::debug!("Opening library: '{lib}'");
+    let lib = daimojo::DaiMojo::library(lib)?;
+    println!("Library's daimojo version is {}", lib.version());
+    log::debug!("Opening pipeline: '{mojo}'");
+    let pipeline = lib.pipeline(mojo)?;
+    Ok(pipeline)
+}
+
+mod cmd_predict;
