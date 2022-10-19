@@ -7,7 +7,7 @@ use daimojo::{MojoFrame, MojoPipeline};
 
 const MOJO_I32_NAN: i32 = i32::MAX;
 const MOJO_I64_NAN: i64 = i64::MAX;
-const BATCH_SIZE: usize = 5;
+const BATCH_SIZE: usize = 1000;
 
 //TODO missing features:
 // - processing in multiple batches
@@ -23,7 +23,7 @@ pub fn cmd_predict(pipeline: &MojoPipeline, _output: Option<String>, input: Opti
 
     let mut rdr = csv::Reader::from_path(input.unwrap())?;
     let mut importer = FrameImporter::init(&pipeline, &mut rdr, &mut frame, BATCH_SIZE)?;
-    let mut exporter = FrameExporter::init(&pipeline, &frame)?; //TODO NOT HERE!
+    let mut exporter = FrameExporter::init(&pipeline, &frame)?;
     // read csv
     let mut rdr_iter = rdr.records();
     while ! importer.eof {
@@ -31,11 +31,12 @@ pub fn cmd_predict(pipeline: &MojoPipeline, _output: Option<String>, input: Opti
 
         // predict
         pipeline.predict(&mut frame, rows);
+        log::debug!("-- batch {rows} rows");
 
         // output csv
         exporter.export_frame(rows)?;
     }
-    println!("Total rows: {}", exporter.saved_rows);
+    log::info!("Total rows: {}", exporter.saved_rows);
     //
     Ok(0)
 }
@@ -106,6 +107,7 @@ impl FrameExporter {
             ocols.push(ColumnData { data_type, array_start: ptr, current: ptr as *mut u8 });
         }
         wtr.write_record(None::<&[u8]>)?;
+        wtr.flush()?;
         Ok(Self { saved_batches: 0, saved_rows:0, wtr, ocols})
     }
 
@@ -118,6 +120,7 @@ impl FrameExporter {
                 self.wtr.write_field(s)?;
             }
             self.wtr.write_record(None::<&[u8]>)?;
+            self.wtr.flush()?;
         }
         self.saved_batches += 1;
         self.saved_rows += rows;
@@ -159,6 +162,7 @@ impl ColumnData  {
     }
 
     fn item_from_str(&mut self, value: &str) {
+        log::trace!("memset:{:?}:[@0x{:x}] = '{value}'",self.data_type, self.current as usize);
         match self.data_type {
             MOJO_DataType::MOJO_FLOAT => {
                 let value = value.parse::<f32>().unwrap_or(f32::NAN);

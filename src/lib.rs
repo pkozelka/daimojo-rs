@@ -4,7 +4,7 @@ use std::ffi::{CStr, CString};
 use std::io::{Error, ErrorKind};
 use std::os::raw::c_char;
 use std::rc::Rc;
-use crate::daimojo_library::{DaiMojoLibrary, MOJO_Col, MOJO_DataType, MOJO_Frame, MOJO_Model, PArrayOperations, PCharArrayOperations};
+use crate::daimojo_library::{DaiMojoLibrary, MOJO_DataType, MOJO_Frame, MOJO_Model, PArrayOperations, PCharArrayOperations};
 
 pub mod daimojo_library;
 
@@ -69,13 +69,40 @@ impl MojoPipeline {
         result
     }
 
-    pub fn create_frame(&self, nrows: usize) -> MojoFrame {
-        let mojo_frame = self.lib.new_frame(self.mojo_model, nrows);
-        MojoFrame { lib: self.lib.clone(), mojo_frame, row_count: nrows }
+    pub fn create_frame(&self, nrow: usize) -> MojoFrame {
+        let mojo_frame = self.lib.new_frame(self.mojo_model, nrow);
+/*
+        let mut buffers = HashMap::new();
+        let ocnt = self.lib.output_num(self.mojo_model);
+        let outputs = self.lib.output_names(self.mojo_model).to_slice(ocnt);
+        for colname in outputs {
+            let ptr = self.lib.column_buffer(mojo_frame, *colname);
+            let colname_str = unsafe { CStr::from_ptr(*colname) }.to_string_lossy().to_string();
+            println!("ADD: {colname_str} -> {:x}", ptr as usize);
+            buffers.insert(colname_str, ptr);
+        }
+        MojoFrame { lib: self.lib.clone(), mojo_frame, row_count: nrow , buffers}
+*/
+        MojoFrame { lib: self.lib.clone(), mojo_frame, row_count: nrow}
     }
 
-    pub fn predict(&self, frame: &mut MojoFrame, nrows: usize) {
-        self.lib.predict(self.mojo_model, frame.mojo_frame, nrows);
+    pub fn predict(&self, frame: &mut MojoFrame, nrow: usize) {
+        self.lib.predict(self.mojo_model, frame.mojo_frame, nrow);
+/*
+        let ocnt = self.lib.output_num(self.mojo_model);
+        let onames = self.lib.output_names(self.mojo_model).to_slice(ocnt);
+        for oname in onames {
+            let oname_str = unsafe { CStr::from_ptr(*oname) }.to_string_lossy().to_string();
+            // println!("Looking for {oname_str}:");
+            let buffer = *frame.buffers.get(&oname_str).expect(&format!("invalid name: {}", oname_str));
+            // println!("... found {:x}", buffer as usize);
+            if self.lib.frame_fetchdata(frame.mojo_frame, *oname, buffer, nrow) {
+                // println!("... fetched");
+            } else {
+                println!("... NOT FETCHED {oname_str} at {:x}", buffer as usize);
+            }
+        }
+*/
     }
 
     pub fn uuid(&self) -> &str {
@@ -104,12 +131,14 @@ pub struct MojoFrame {
     lib: Rc<DaiMojoLibrary>,
     mojo_frame: *const MOJO_Frame,
     row_count: usize,
+    // buffers: HashMap<String, *mut u8>,
 }
 
 impl MojoFrame {
-    fn column(&self, col_name: &str) -> Option<*const MOJO_Col> {
+    fn column(&self, col_name: &str) -> Option<*mut u8> {
         let name = CString::new(col_name).unwrap();
-        let p = self.lib.get_col_by_name(self.mojo_frame, name.as_ptr());
+        // let p = self.lib.get_col_by_name(self.mojo_frame, name.as_ptr());
+        let p = self.lib.column_buffer(self.mojo_frame, name.as_ptr());
         if p.is_null() {
             None
         } else {
@@ -118,13 +147,15 @@ impl MojoFrame {
     }
 
     pub fn input_mut(&mut self, col_name: &str) -> Option<*mut u8> {
-        let col = self.column(col_name)?;
-        Some(self.lib.data(col))
+        log::info!("Preparing input: '{col_name}'");
+        self.column(col_name)
     }
 
     pub fn output(&self, col_name: &str) -> Option<*const u8> {
-        let col = self.column(col_name)?;
-        Some(self.lib.data(col))
+        match self.column(col_name) {
+            None => None,
+            Some(p) => Some(p as *const u8)
+        }
     }
 
     pub fn input_f32_mut(&mut self, col_name: &str) -> Option<&mut [f32]> {

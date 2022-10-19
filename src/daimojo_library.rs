@@ -62,15 +62,17 @@ pub struct DaiMojoBindings {
     MOJO_Pipeline_NewFrame: unsafe extern "C" fn(pipeline: *const MOJO_Model, nrow: usize) -> *const MOJO_Frame,
     MOJO_DeleteFrame: unsafe extern "C" fn(frame: *const MOJO_Frame),
     MOJO_FrameNcol: unsafe extern "C" fn(frame: *const MOJO_Frame) -> usize,
-    MOJO_GetColByName: unsafe extern "C" fn(frame: *const MOJO_Frame, name: *const c_char) -> *const MOJO_Col,
+    MOJO_Column_Buffer: unsafe extern "C" fn(frame: *const MOJO_Frame, colname: *const c_char) -> *mut u8,
+    // DEPRECATED APIS
     // Column
     MOJO_NewCol: unsafe extern "C" fn(datatype: MOJO_DataType, size: usize, data: *mut u8) -> *const MOJO_Col,
     MOJO_DeleteCol: unsafe extern "C" fn(col: *const MOJO_Col),
     MOJO_Type: unsafe extern "C" fn(col: *const MOJO_Col) -> MOJO_DataType,
     MOJO_Data: unsafe extern "C" fn(col: *const MOJO_Col) -> *mut u8,
-    // DEPRECATED APIS
+    //
     MOJO_Predict: unsafe extern "C" fn(pipeline: *const MOJO_Model, frame: *const MOJO_Frame),
     MOJO_NewFrame: unsafe extern "C" fn(cols: *const *const MOJO_Col, names: PCharArray, count: usize) -> *const MOJO_Frame,
+    MOJO_GetColByName: unsafe extern "C" fn(frame: *const MOJO_Frame, colname: *const c_char) -> *const MOJO_Col,
 }
 
 pub struct DaiMojoLibrary {
@@ -165,8 +167,8 @@ impl DaiMojoLibrary {
         unsafe { self.api.MOJO_DeleteFrame(frame)}
     }
 
-    pub fn get_col_by_name(&self, frame: *const MOJO_Frame, name: *const c_char) -> *const MOJO_Col {
-        unsafe { self.api.MOJO_GetColByName(frame, name)}
+    pub fn get_col_by_name(&self, frame: *const MOJO_Frame, colname: *const c_char) -> *const MOJO_Col {
+        unsafe { self.api.MOJO_GetColByName(frame, colname)}
     }
 
     pub fn frame_ncol(&self, frame: *const MOJO_Frame) -> usize {
@@ -193,10 +195,15 @@ impl DaiMojoLibrary {
         unsafe { std::alloc::alloc_zeroed(layout) }
     }
 
+    pub fn column_buffer(&self, frame: *const MOJO_Frame, colname: *const c_char) -> *mut u8 {
+        unsafe { self.api.MOJO_Column_Buffer(frame, colname) }
+    }
+
     pub fn _delete_col(&self, col: *const MOJO_Col) {
         unsafe { self.api.MOJO_DeleteCol(col) }
     }
 
+    #[deprecated]
     pub fn data(&self, col: *const MOJO_Col) -> *mut u8 {
         unsafe { self.api.MOJO_Data(col) }
     }
