@@ -19,7 +19,7 @@ struct Cli {
     silent: u8,
 
     /// Path to the daimojo library
-    #[arg(long,default_value="lib/linux_x64/libdaimojo.so")]
+    #[arg(long,default_value="libdaimojo.so")]
     lib: String,
 
     /// Path to the pipeline

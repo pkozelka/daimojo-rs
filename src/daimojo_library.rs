@@ -8,6 +8,7 @@ use dlopen2::wrapper::Container;
 use dlopen2::wrapper::WrapperApi;
 use std::io::ErrorKind;
 use std::ffi::CStr;
+use std::path::PathBuf;
 
 #[allow(non_camel_case_types)]
 pub struct MOJO_Model {}
@@ -56,9 +57,9 @@ pub struct DaiMojoBindings {
     MOJO_OutputNum: unsafe extern "C" fn(pipeline: *const MOJO_Model) -> usize,
     MOJO_OutputNames: unsafe extern "C" fn(pipeline: *const MOJO_Model) -> PCharArray,
     MOJO_OutputTypes: unsafe extern "C" fn(pipeline: *const MOJO_Model) -> *const MOJO_DataType,
-    MOJO_Predict: unsafe extern "C" fn(pipeline: *const MOJO_Model, frame: *const MOJO_Frame),
+    MOJO_Pipeline_Predict: unsafe extern "C" fn(pipeline: *const MOJO_Model, frame: *const MOJO_Frame, nrow: usize),
     // Frame
-    MOJO_NewFrame: unsafe extern "C" fn(cols: *const *const MOJO_Col, names: PCharArray, count: usize) -> *const MOJO_Frame,
+    MOJO_Pipeline_NewFrame: unsafe extern "C" fn(pipeline: *const MOJO_Model, nrow: usize) -> *const MOJO_Frame,
     MOJO_DeleteFrame: unsafe extern "C" fn(frame: *const MOJO_Frame),
     MOJO_FrameNcol: unsafe extern "C" fn(frame: *const MOJO_Frame) -> usize,
     MOJO_GetColByName: unsafe extern "C" fn(frame: *const MOJO_Frame, name: *const c_char) -> *const MOJO_Col,
@@ -67,6 +68,9 @@ pub struct DaiMojoBindings {
     MOJO_DeleteCol: unsafe extern "C" fn(col: *const MOJO_Col),
     MOJO_Type: unsafe extern "C" fn(col: *const MOJO_Col) -> MOJO_DataType,
     MOJO_Data: unsafe extern "C" fn(col: *const MOJO_Col) -> *mut u8,
+    // DEPRECATED APIS
+    MOJO_Predict: unsafe extern "C" fn(pipeline: *const MOJO_Model, frame: *const MOJO_Frame),
+    MOJO_NewFrame: unsafe extern "C" fn(cols: *const *const MOJO_Col, names: PCharArray, count: usize) -> *const MOJO_Frame,
 }
 
 pub struct DaiMojoLibrary {
@@ -77,6 +81,8 @@ pub struct DaiMojoLibrary {
 impl DaiMojoLibrary {
 
     pub fn open(libname: &str) -> Result<Self, std::io::Error> {
+        let lib = PathBuf::from(libname).canonicalize()?;
+        let libname = lib.to_str().expect(&format!("Not a valid unicode pathname: {libname}"));
         let version_api: Container<DaiMojoVersionBindings> = unsafe { Container::load(libname) }
             .map_err(|e| std::io::Error::new(ErrorKind::InvalidInput, format!("{libname}: {e:?}")))?;
         let version = unsafe { CStr::from_ptr(version_api.mojo_version()) };
@@ -147,12 +153,12 @@ impl DaiMojoLibrary {
         unsafe { self.api.MOJO_OutputTypes(pipeline) }
     }
 
-    pub fn predict(&self, pipeline: *const MOJO_Model, frame: *const MOJO_Frame) {
-        unsafe { self.api.MOJO_Predict(pipeline, frame) }
+    pub fn predict(&self, pipeline: *const MOJO_Model, frame: *const MOJO_Frame, nrow: usize) {
+        unsafe { self.api.MOJO_Pipeline_Predict(pipeline, frame, nrow) }
     }
 
-    pub fn new_frame(&self, cols: *const *const MOJO_Col, names: PCharArray, count: usize) -> *const MOJO_Frame {
-        unsafe { self.api.MOJO_NewFrame(cols, names, count) }
+    pub fn new_frame(&self, pipeline: *const MOJO_Model, nrow: usize) -> *const MOJO_Frame {
+        unsafe { self.api.MOJO_Pipeline_NewFrame(pipeline, nrow) }
     }
 
     pub fn delete_frame(&self, frame: *const MOJO_Frame) {
@@ -243,9 +249,12 @@ mod tests {
     use std::path::PathBuf;
     use super::{DaiMojoLibrary, PArrayOperations, PCharArrayOperations};
 
+    // const LIBDAIMOJO_SO: &str = "lib/linux_x64/libdaimojo.so";
+    const LIBDAIMOJO_SO: &str = "libdaimojo.so";
+
     #[test]
     fn iris() {
-        let lib = DaiMojoLibrary::open("lib/linux_x64/libdaimojo.so").unwrap();
+        let lib = DaiMojoLibrary::open(LIBDAIMOJO_SO).unwrap();
         let version = lib.version().to_string_lossy();
         println!("version: {version}");
 

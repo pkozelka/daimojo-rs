@@ -19,22 +19,23 @@ const BATCH_SIZE: usize = 5;
 // - set row size
 
 pub fn cmd_predict(pipeline: &MojoPipeline, _output: Option<String>, input: Option<String>) -> std::io::Result<u8> {
-    let mut frame = pipeline.frame(BATCH_SIZE);
+    let mut frame = pipeline.create_frame(BATCH_SIZE);
 
     let mut rdr = csv::Reader::from_path(input.unwrap())?;
     let mut importer = FrameImporter::init(&pipeline, &mut rdr, &mut frame, BATCH_SIZE)?;
+    let mut exporter = FrameExporter::init(&pipeline, &frame)?; //TODO NOT HERE!
     // read csv
     let mut rdr_iter = rdr.records();
     while ! importer.eof {
         let rows = importer.import_frame(&mut rdr_iter)?;
+
         // predict
-        pipeline.predict(&mut frame);
+        pipeline.predict(&mut frame, rows);
 
         // output csv
-        let mut exporter = FrameExporter::init(&pipeline, &frame)?; //TODO NOT HERE!
         exporter.export_frame(rows)?;
-        println!("Total rows: {}", exporter.saved_rows);
     }
+    println!("Total rows: {}", exporter.saved_rows);
     //
     Ok(0)
 }

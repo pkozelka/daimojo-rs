@@ -69,37 +69,13 @@ impl MojoPipeline {
         result
     }
 
-    /// This is a helper function that is not directly represented in the API
-    pub fn frame(&self, row_count: usize) -> MojoFrame {
-        let mut names = Vec::new();
-        let mut cols = Vec::new();
-        // inputs
-        {
-            let icnt = self.lib.feature_num(self.mojo_model);
-            let inames = self.lib.feature_names(self.mojo_model).to_slice(icnt);
-            let itypes = self.lib.feature_types(self.mojo_model).to_slice(icnt);
-            for i in 0..icnt {
-                names.push(inames[i]);
-                cols.push(self.lib.new_col(itypes[i], row_count));
-            }
-        }
-        // outputs
-        {
-            let ocnt = self.lib.output_num(self.mojo_model);
-            let onames = self.lib.output_names(self.mojo_model).to_slice(ocnt);
-            let otypes = self.lib.output_types(self.mojo_model).to_slice(ocnt);
-            for i in 0..ocnt {
-                names.push(onames[i]);
-                cols.push(self.lib.new_col(otypes[i], row_count));
-            }
-        }
-        // MojoFrame { lib: self.lib.clone(), mojo_frame, row_count}
-        let mojo_frame = self.lib.new_frame(cols.as_ptr(), names.as_ptr(), names.len());
-        MojoFrame { lib: self.lib.clone(), mojo_frame, row_count }
+    pub fn create_frame(&self, nrows: usize) -> MojoFrame {
+        let mojo_frame = self.lib.new_frame(self.mojo_model, nrows);
+        MojoFrame { lib: self.lib.clone(), mojo_frame, row_count: nrows }
     }
 
-    pub fn predict(&self, frame: &mut MojoFrame) {
-        self.lib.predict(self.mojo_model, frame.mojo_frame);
+    pub fn predict(&self, frame: &mut MojoFrame, nrows: usize) {
+        self.lib.predict(self.mojo_model, frame.mojo_frame, nrows);
     }
 
     pub fn uuid(&self) -> &str {
@@ -177,8 +153,8 @@ impl Drop for MojoFrame {
 mod tests {
     use super::DaiMojo;
 
-    const LIBDAIMOJO_SO: &str = "lib/linux_x64/libdaimojo.so";
-    // const LIBDAIMOJO_SO: &str = "/home/pk/h2o/mojo2/cpp/build/libdaimojo.so";
+    // const LIBDAIMOJO_SO: &str = "lib/linux_x64/libdaimojo.so";
+    const LIBDAIMOJO_SO: &str = "libdaimojo.so";
 
     #[test]
     fn simple_iris_test() -> std::io::Result<()>{
@@ -188,14 +164,14 @@ mod tests {
         let pipeline = daimojo.pipeline("data/iris/pipeline.mojo")?;
         println!("Pipeline UUID: {}", pipeline.uuid());
         println!("Time created: {}", pipeline.time_created());
-        let mut frame = pipeline.frame(1);
+        let mut frame = pipeline.create_frame(1);
         // fill input columns
         frame.input_f32_mut("sepal_len").unwrap()[0] = 5.1;
         frame.input_f32_mut("sepal_wid").unwrap()[0] = 3.5;
         frame.input_f32_mut("petal_len").unwrap()[0] = 1.4;
         frame.input_f32_mut("petal_wid").unwrap()[0] = 0.2;
         log::trace!("ncol before predict: {}", frame.ncol());
-        pipeline.predict(&mut frame);
+        pipeline.predict(&mut frame, 1);
         log::trace!("ncol after predict: {}", frame.ncol());
         // present output columns
         let setosa = frame.output_f32("class.Iris-setosa").unwrap()[0];
@@ -216,7 +192,7 @@ mod tests {
         let pipeline = daimojo.pipeline("data/iris/pipeline.mojo")?;
         println!("Pipeline UUID: {}", pipeline.uuid());
         println!("Time created: {}", pipeline.time_created());
-        let mut frame = pipeline.frame(5);
+        let mut frame = pipeline.create_frame(5);
         // fill input columns
         let fa = frame.input_f32_mut("fixed acidity").unwrap();
         fa[0] = 11.8;
@@ -225,7 +201,7 @@ mod tests {
         fa[3] = 8.6;
         fa[4] = 7.3;
         log::trace!("ncol before predict: {}", frame.ncol());
-        pipeline.predict(&mut frame);
+        pipeline.predict(&mut frame, 5);
         log::trace!("ncol after predict: {}", frame.ncol());
         // present output columns
         let q3 = &frame.output_f32("quality.3").unwrap()[0..5];
