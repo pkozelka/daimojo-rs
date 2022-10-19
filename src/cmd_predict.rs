@@ -7,7 +7,7 @@ use daimojo::{MojoFrame, MojoPipeline};
 
 const MOJO_I32_NAN: i32 = i32::MAX;
 const MOJO_I64_NAN: i64 = i64::MAX;
-const BATCH_SIZE: usize = 1000;
+const BATCH_SIZE: usize = 5;
 
 //TODO missing features:
 // - processing in multiple batches
@@ -21,32 +21,32 @@ const BATCH_SIZE: usize = 1000;
 pub fn cmd_predict(pipeline: &MojoPipeline, _output: Option<String>, input: Option<String>) -> std::io::Result<u8> {
     let mut frame = pipeline.frame(BATCH_SIZE);
 
-    let mut importer = FrameImporter::init(&pipeline, input, &mut frame, BATCH_SIZE)?;
-
+    let mut rdr = csv::Reader::from_path(input.unwrap())?;
+    let mut importer = FrameImporter::init(&pipeline, &mut rdr, &mut frame, BATCH_SIZE)?;
     // read csv
-    let total_rows = importer.import_frame()?;
-    //TODO: support multiple batches
+    let mut rdr_iter = rdr.records();
+    while ! importer.eof {
+        let rows = importer.import_frame(&mut rdr_iter)?;
+        // predict
+        pipeline.predict(&mut frame);
 
-    // predict
-    pipeline.predict(&mut frame);
-
-    // output csv
-    let mut exporter = FrameExporter::init(&pipeline, &frame)?;
-    exporter.export_frame(total_rows)?;
+        // output csv
+        let mut exporter = FrameExporter::init(&pipeline, &frame)?; //TODO NOT HERE!
+        exporter.export_frame(rows)?;
+        println!("Total rows: {}", exporter.saved_rows);
+    }
     //
     Ok(0)
 }
 
 struct FrameImporter {
-    rdr: csv::Reader<std::fs::File>,
     icols: Vec<(ColumnData, usize)>,
     batch_size: usize,
     eof: bool,
 }
 
 impl FrameImporter {
-    pub fn init(pipeline: &MojoPipeline, input: Option<String>, frame: &mut MojoFrame, batch_size: usize) -> std::io::Result<Self> {
-        let mut rdr = csv::Reader::from_path(input.unwrap())?;
+    pub fn init(pipeline: &MojoPipeline, rdr: &mut csv::Reader<std::fs::File>, frame: &mut MojoFrame, batch_size: usize) -> std::io::Result<Self> {
         let csv_headers = match rdr.headers() {
             Err(e) => return Err(std::io::Error::new(ErrorKind::InvalidData, format!("Cannot read header: {e}"))),
             Ok(headers) => headers,
@@ -61,14 +61,16 @@ impl FrameImporter {
                 icols.push((ColumnData { data_type, array_start: ptr, current: ptr }, csv_index))
             }
         }
-        Ok(Self { rdr, icols, batch_size, eof: false })
+        Ok(Self { icols, batch_size, eof: false })
     }
 
-    pub fn import_frame(&mut self) -> std::io::Result<usize> {
+    pub fn import_frame(&mut self, rdr_iter: &mut csv::StringRecordsIter<std::fs::File>) -> std::io::Result<usize> {
         let mut rows = 0;
+        if self.eof {
+            return Ok(0);
+        }
         ColumnData::reset_current_tuple(&mut self.icols);
-        let iter = self.rdr.records();
-        for record in iter {
+        for record in rdr_iter {
             let record = record?;
             // fill mojo row
             for (col, csv_index) in &mut self.icols {
@@ -77,9 +79,11 @@ impl FrameImporter {
             }
             rows += 1;
             if rows == self.batch_size {
-                break
+                return Ok(rows)
             }
         }
+        // ending prematurely => last batch
+        self.eof = true;
         Ok(rows)
     }
 }
@@ -182,6 +186,18 @@ impl ColumnData  {
         match self.data_type {
             MOJO_DataType::MOJO_FLOAT => {
                 let value = unchecked_read_next::<f32>(&mut self.current);
+                format!("{value}")
+            }
+            MOJO_DataType::MOJO_DOUBLE => {
+                let value = unchecked_read_next::<f64>(&mut self.current);
+                format!("{value}")
+            }
+            MOJO_DataType::MOJO_INT32 => {
+                let value = unchecked_read_next::<i32>(&mut self.current);
+                format!("{value}")
+            }
+            MOJO_DataType::MOJO_INT64 => {
+                let value = unchecked_read_next::<i64>(&mut self.current);
                 format!("{value}")
             }
             //TODO!

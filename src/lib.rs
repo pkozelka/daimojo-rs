@@ -177,9 +177,12 @@ impl Drop for MojoFrame {
 mod tests {
     use super::DaiMojo;
 
+    const LIBDAIMOJO_SO: &str = "lib/linux_x64/libdaimojo.so";
+    // const LIBDAIMOJO_SO: &str = "/home/pk/h2o/mojo2/cpp/build/libdaimojo.so";
+
     #[test]
-    fn simple_test() -> std::io::Result<()>{
-        let daimojo = DaiMojo::library("lib/linux_x64/libdaimojo.so")?;
+    fn simple_iris_test() -> std::io::Result<()>{
+        let daimojo = DaiMojo::library(LIBDAIMOJO_SO)?;
         let version = daimojo.version();
         println!("Library version: {version}");
         let pipeline = daimojo.pipeline("data/iris/pipeline.mojo")?;
@@ -202,6 +205,32 @@ mod tests {
         assert_eq!(setosa, 0.43090245);
         assert_eq!(versicolor, 0.28463825583457947);
         assert_eq!(virginica, 0.28445929288864136);
+        Ok(())
+    }
+
+    #[test]
+    fn simple_wine_test() -> std::io::Result<()> {
+        let daimojo = DaiMojo::library(LIBDAIMOJO_SO)?;
+        let version = daimojo.version();
+        println!("Library version: {version}");
+        let pipeline = daimojo.pipeline("data/iris/pipeline.mojo")?;
+        println!("Pipeline UUID: {}", pipeline.uuid());
+        println!("Time created: {}", pipeline.time_created());
+        let mut frame = pipeline.frame(5);
+        // fill input columns
+        let fa = frame.input_f32_mut("fixed acidity").unwrap();
+        fa[0] = 11.8;
+        fa[1] = 7.2;
+        fa[2] = 6.4;
+        fa[3] = 8.6;
+        fa[4] = 7.3;
+        log::trace!("ncol before predict: {}", frame.ncol());
+        pipeline.predict(&mut frame);
+        log::trace!("ncol after predict: {}", frame.ncol());
+        // present output columns
+        let q3 = &frame.output_f32("quality.3").unwrap()[0..5];
+        let q3s = q3.iter().map(|s|s.to_string()).collect::<Vec<String>>().join(",");
+        println!("Result: q3={}", q3s);
         Ok(())
     }
 }
