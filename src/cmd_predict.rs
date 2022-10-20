@@ -59,7 +59,7 @@ impl FrameImporter {
         let mut icols = Vec::new();
         for (col_name, data_type) in pipeline.inputs() {
             if let Some(&csv_index) = csv_headers.get(col_name.as_str()) {
-                let ptr = frame.input_mut(&col_name).unwrap();
+                let ptr = frame.input_mut(&col_name).expect(&format!("No buffer for input column '{col_name}'"));
                 icols.push((ColumnData { data_type, array_start: ptr, current: ptr }, csv_index))
             }
         }
@@ -103,7 +103,7 @@ impl FrameExporter {
         let mut ocols = Vec::new();
         for (col_name, data_type) in pipeline.outputs() {
             wtr.write_field(&col_name)?;
-            let ptr = frame.output(&col_name).unwrap();
+            let ptr = frame.output(&col_name).expect(&format!("No buffer for output column '{col_name}'"));
             ocols.push(ColumnData { data_type, array_start: ptr, current: ptr as *mut u8 });
         }
         wtr.write_record(None::<&[u8]>)?;
@@ -113,7 +113,6 @@ impl FrameExporter {
 
     fn export_frame(&mut self, rows: usize) -> std::io::Result<()> {
         ColumnData::reset_current(&mut self.ocols);
-        //TODO: reset current <- array_start
         for _ in 0..rows {
             for col in &mut self.ocols {
                 let s = col.item_to_string();
