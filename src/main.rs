@@ -36,6 +36,9 @@ enum Commands {
     Show,
     /// Run prediction
     Predict {
+        /// Set batch size. For 0, it is determined automatically
+        #[arg(long="batch",default_value="0")]
+        batch_size: usize,
         #[arg(long="out")]
         output: Option<String>,
         //TODO later, this will probably be Vec<String>
@@ -87,9 +90,9 @@ fn run() -> std::io::Result<u8> {
         Commands::Show => {
             return show_pipeline(&lib, &cli.mojo)
         }
-        Commands::Predict {output, input} => {
+        Commands::Predict {output, input, batch_size} => {
             let pipeline = open_pipeline(&cli.lib, &cli.mojo)?;
-            cmd_predict::cmd_predict(&pipeline, output, input)
+            cmd_predict::cmd_predict(&pipeline, output, input, batch_size)
         }
     }
 }

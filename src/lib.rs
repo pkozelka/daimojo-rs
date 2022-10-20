@@ -140,6 +140,7 @@ impl MojoFrame {
         // let p = self.lib.get_col_by_name(self.mojo_frame, name.as_ptr());
         let p = self.lib.column_buffer(self.mojo_frame, name.as_ptr());
         if p.is_null() {
+            log::warn!("buffer for column '{col_name}' is null");
             None
         } else {
             Some(p)
