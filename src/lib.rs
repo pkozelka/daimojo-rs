@@ -71,38 +71,11 @@ impl MojoPipeline {
 
     pub fn create_frame(&self, nrow: usize) -> MojoFrame {
         let mojo_frame = self.lib.new_frame(self.mojo_model, nrow);
-/*
-        let mut buffers = HashMap::new();
-        let ocnt = self.lib.output_num(self.mojo_model);
-        let outputs = self.lib.output_names(self.mojo_model).to_slice(ocnt);
-        for colname in outputs {
-            let ptr = self.lib.column_buffer(mojo_frame, *colname);
-            let colname_str = unsafe { CStr::from_ptr(*colname) }.to_string_lossy().to_string();
-            println!("ADD: {colname_str} -> {:x}", ptr as usize);
-            buffers.insert(colname_str, ptr);
-        }
-        MojoFrame { lib: self.lib.clone(), mojo_frame, row_count: nrow , buffers}
-*/
         MojoFrame { lib: self.lib.clone(), mojo_frame, row_count: nrow}
     }
 
     pub fn predict(&self, frame: &mut MojoFrame, nrow: usize) {
         self.lib.predict(self.mojo_model, frame.mojo_frame, nrow);
-/*
-        let ocnt = self.lib.output_num(self.mojo_model);
-        let onames = self.lib.output_names(self.mojo_model).to_slice(ocnt);
-        for oname in onames {
-            let oname_str = unsafe { CStr::from_ptr(*oname) }.to_string_lossy().to_string();
-            // println!("Looking for {oname_str}:");
-            let buffer = *frame.buffers.get(&oname_str).expect(&format!("invalid name: {}", oname_str));
-            // println!("... found {:x}", buffer as usize);
-            if self.lib.frame_fetchdata(frame.mojo_frame, *oname, buffer, nrow) {
-                // println!("... fetched");
-            } else {
-                println!("... NOT FETCHED {oname_str} at {:x}", buffer as usize);
-            }
-        }
-*/
     }
 
     pub fn uuid(&self) -> &str {
