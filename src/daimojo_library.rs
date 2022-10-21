@@ -62,6 +62,7 @@ pub struct DaiMojoBindings {
     MOJO_Pipeline_NewFrame: unsafe extern "C" fn(pipeline: *const MOJO_Model, nrow: usize) -> *const MOJO_Frame,
     MOJO_DeleteFrame: unsafe extern "C" fn(frame: *const MOJO_Frame),
     MOJO_FrameNcol: unsafe extern "C" fn(frame: *const MOJO_Frame) -> usize,
+    MOJO_Frame_GetRowCount: unsafe extern "C" fn(frame: *const MOJO_Frame) -> usize,
     MOJO_Column_Buffer: unsafe extern "C" fn(frame: *const MOJO_Frame, colname: *const c_char) -> *mut u8,
     // DEPRECATED APIS
     // Column
@@ -165,6 +166,10 @@ impl DaiMojoLibrary {
 
     pub fn delete_frame(&self, frame: *const MOJO_Frame) {
         unsafe { self.api.MOJO_DeleteFrame(frame)}
+    }
+
+    pub fn frame_get_row_count(&self, frame: *const MOJO_Frame) -> usize {
+        unsafe { self.api.MOJO_Frame_GetRowCount(frame) }
     }
 
     pub fn get_col_by_name(&self, frame: *const MOJO_Frame, colname: *const c_char) -> *const MOJO_Col {

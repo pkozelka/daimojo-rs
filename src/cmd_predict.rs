@@ -26,7 +26,7 @@ pub fn cmd_predict(pipeline: &MojoPipeline, _output: Option<String>, input: Opti
     let mut frame = pipeline.create_frame(batch_size);
 
     let mut rdr = csv::Reader::from_path(input.unwrap())?;
-    let mut importer = FrameImporter::init(&pipeline, &mut rdr, &mut frame, batch_size)?;
+    let mut importer = FrameImporter::init(&pipeline, &mut frame, &mut rdr)?;
     let mut exporter = FrameExporter::init(&pipeline, &frame)?;
     // read csv
     let mut rdr_iter = rdr.records();
@@ -52,7 +52,7 @@ struct FrameImporter {
 }
 
 impl FrameImporter {
-    pub fn init(pipeline: &MojoPipeline, rdr: &mut csv::Reader<std::fs::File>, frame: &mut MojoFrame, batch_size: usize) -> std::io::Result<Self> {
+    pub fn init(pipeline: &MojoPipeline, frame: &mut MojoFrame, rdr: &mut csv::Reader<std::fs::File>) -> std::io::Result<Self> {
         let csv_headers = match rdr.headers() {
             Err(e) => return Err(std::io::Error::new(ErrorKind::InvalidData, format!("Cannot read header: {e}"))),
             Ok(headers) => headers,
@@ -67,7 +67,11 @@ impl FrameImporter {
                 icols.push((ColumnData { data_type, array_start: ptr, current: ptr }, csv_index))
             }
         }
-        Ok(Self { icols, batch_size, eof: false })
+        Ok(Self {
+            icols,
+            batch_size: frame.nrow(),
+            eof: rdr.is_done()
+        })
     }
 
     pub fn import_frame(&mut self, rdr_iter: &mut csv::StringRecordsIter<std::fs::File>) -> std::io::Result<usize> {

@@ -172,6 +172,10 @@ impl MojoFrame {
     pub fn ncol(&self) -> usize {
         self.lib.frame_ncol(self.mojo_frame)
     }
+
+    pub fn nrow(&self) -> usize {
+        self.lib.frame_get_row_count(self.mojo_frame)
+    }
 }
 
 impl Drop for MojoFrame {
