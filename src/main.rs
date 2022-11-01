@@ -63,7 +63,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run() -> std::io::Result<u8> {
+fn run() -> anyhow::Result<u8> {
     let cli = Cli::parse();
 
     // library path must always contain a directory so we canonicalize it - it's the easiest way to get its absolute path
@@ -88,16 +88,16 @@ fn run() -> std::io::Result<u8> {
     // run subcommand
     match cli.command {
         Commands::Show => {
-            return show_pipeline(&lib, &cli.mojo)
+            return Ok(show_pipeline(&lib, &cli.mojo)?)
         }
         Commands::Predict {output, input, batch_size} => {
             let pipeline = open_pipeline(&cli.lib, &cli.mojo)?;
-            cmd_predict::cmd_predict(&pipeline, output, input, batch_size)
+            Ok(cmd_predict::cmd_predict(&pipeline, output, input, batch_size)?)
         }
     }
 }
 
-fn show_pipeline(lib: &str, mojo: &str) -> std::io::Result<u8> {
+fn show_pipeline(lib: &str, mojo: &str) -> anyhow::Result<u8> {
     let pipeline = open_pipeline(lib, mojo)?;
     println!("* UUID: {}", pipeline.uuid());
     println!("* Time created: {}", pipeline.time_created());
@@ -115,7 +115,7 @@ fn show_pipeline(lib: &str, mojo: &str) -> std::io::Result<u8> {
     Ok(0)
 }
 
-fn open_pipeline(lib: &str, mojo: &str) -> std::io::Result<MojoPipeline> {
+fn open_pipeline(lib: &str, mojo: &str) -> daimojo::Result<MojoPipeline> {
     log::debug!("Opening library: '{lib}'");
     let lib = daimojo::DaiMojo::library(lib)?;
     println!("Library's daimojo version is {}", lib.version());

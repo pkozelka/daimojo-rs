@@ -58,11 +58,16 @@ pub struct DaiMojoBindings {
     MOJO_OutputNames: unsafe extern "C" fn(pipeline: *const MOJO_Model) -> PCharArray,
     MOJO_OutputTypes: unsafe extern "C" fn(pipeline: *const MOJO_Model) -> *const MOJO_DataType,
     MOJO_Pipeline_Predict: unsafe extern "C" fn(pipeline: *const MOJO_Model, frame: *const MOJO_Frame, nrow: usize),
+    //TODO MOJO_Pipeline_Predict: unsafe extern "C" fn(pipeline: *const MOJO_Model, frame: *const MOJO_Frame, config: *const MOJO_Config),
+    //TODO MOJO_Config_New()
+    //TODO MOJO_Config_Delete(config: *mut MOJO_Config)
+    //TODO MOJO_Config_Set(config: *mut MOJO_Config, key: PChar, value: PChar) -> bool,
     // Frame
     MOJO_Pipeline_NewFrame: unsafe extern "C" fn(pipeline: *const MOJO_Model, nrow: usize) -> *const MOJO_Frame,
     MOJO_DeleteFrame: unsafe extern "C" fn(frame: *const MOJO_Frame),
     MOJO_FrameNcol: unsafe extern "C" fn(frame: *const MOJO_Frame) -> usize,
     MOJO_Frame_GetRowCount: unsafe extern "C" fn(frame: *const MOJO_Frame) -> usize,
+    //TODO MOJO_Frame_EffectiveRowCount: unsafe extern "C" fn(frame: *const MOJO_Frame, count: usize) -> usize,
     MOJO_Column_Buffer: unsafe extern "C" fn(frame: *const MOJO_Frame, colname: *const c_char) -> *mut u8,
     // DEPRECATED APIS
     // Column
@@ -116,8 +121,8 @@ impl DaiMojoLibrary {
         unsafe { CStr::from_ptr(self.api.MOJO_UUID(pipeline)) }
     }
 
-    pub fn is_valid(&self, pipeline: *const MOJO_Model) -> i32 {
-        unsafe { self.api.MOJO_IsValid(pipeline) }
+    pub fn is_valid(&self, pipeline: *const MOJO_Model) -> bool {
+        0 != unsafe { self.api.MOJO_IsValid(pipeline) }
     }
 
     pub fn time_created(&self, pipeline: *const MOJO_Model) -> u64 {

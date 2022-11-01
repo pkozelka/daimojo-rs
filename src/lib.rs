@@ -1,12 +1,14 @@
 //! Convenient abstraction for daimojo interface
 
 use std::ffi::{CStr, CString};
-use std::io::{Error, ErrorKind};
 use std::os::raw::c_char;
 use std::rc::Rc;
 use crate::daimojo_library::{DaiMojoLibrary, MOJO_DataType, MOJO_Frame, MOJO_Model, PArrayOperations, PCharArrayOperations};
 
+pub use error::{MojoError,Result};
+
 pub mod daimojo_library;
+mod error;
 
 pub struct DaiMojo {
     lib: Rc<DaiMojoLibrary>,
@@ -22,12 +24,8 @@ impl DaiMojo {
         self.lib.version().to_string_lossy().to_string()
     }
 
-    pub fn pipeline(&self, file: &str) -> std::io::Result<MojoPipeline> {
+    pub fn pipeline(&self, file: &str) -> error::Result<MojoPipeline> {
         let mojo_model = self.lib.new_model(&CString::new(file)?, &CString::new("")?);
-        if self.lib.is_valid(mojo_model) == 0 {
-            // license check or something else failed, see above stderr messages
-            return Err(Error::new(ErrorKind::InvalidData, format!("Pipeline '{file}' is not valid")));
-        }
         Ok(MojoPipeline { lib: self.lib.clone(), mojo_model, })
     }
 }
@@ -74,8 +72,14 @@ impl MojoPipeline {
         MojoFrame { lib: self.lib.clone(), mojo_frame, row_count: nrow}
     }
 
-    pub fn predict(&self, frame: &mut MojoFrame, nrow: usize) {
-        self.lib.predict(self.mojo_model, frame.mojo_frame, nrow);
+    pub fn predict(&self, frame: &mut MojoFrame, nrow: usize) -> error::Result<usize> {
+        if self.lib.is_valid(self.mojo_model) {
+            self.lib.predict(self.mojo_model, frame.mojo_frame, nrow);
+            // TODO return effective count
+            Ok(nrow)
+        } else {
+            Err(error::MojoError::InvalidPipeline)
+        }
     }
 
     pub fn uuid(&self) -> &str {

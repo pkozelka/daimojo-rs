@@ -20,7 +20,7 @@ const MOJO_I64_NAN: i64 = i64::MAX;
 /// Minimum size returned by [batch_size_magic].
 const MIN_BATCH_SIZE: usize = 1000;
 
-pub fn cmd_predict(pipeline: &MojoPipeline, _output: Option<String>, input: Option<String>, batch_size: usize) -> std::io::Result<u8> {
+pub fn cmd_predict(pipeline: &MojoPipeline, _output: Option<String>, input: Option<String>, batch_size: usize) -> anyhow::Result<u8> {
     let batch_size = batch_size_magic(&input, batch_size)?;
 
     let mut frame = pipeline.create_frame(batch_size);
@@ -34,7 +34,7 @@ pub fn cmd_predict(pipeline: &MojoPipeline, _output: Option<String>, input: Opti
         let rows = importer.import_frame(&mut rdr_iter)?;
 
         // predict
-        pipeline.predict(&mut frame, rows);
+        pipeline.predict(&mut frame, rows)?;
         log::debug!("-- batch {rows} rows");
 
         // output csv
