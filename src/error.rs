@@ -7,8 +7,12 @@ pub type Result<T> = std::result::Result<T, MojoError>;
 pub enum MojoError {
     #[error("IO Error")]
     IoError(#[from] std::io::Error),
+    #[error("DlOpen Error")]
+    DlOpenError(#[from] dlopen2::Error),
     #[error("Pipeline is not valid - check your license settings")]
     InvalidPipeline,
     #[error("Null Error")]
     NulError(#[from] NulError),
+    #[error("{0}: Not a supported API inside version '{1}'")]
+    UnsupportedApi(String, String)
 }

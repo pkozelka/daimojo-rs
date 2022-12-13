@@ -1,5 +1,6 @@
 //! Convenient abstraction for daimojo interface
 
+use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::rc::Rc;
@@ -15,16 +16,16 @@ pub struct DaiMojo {
 }
 
 impl DaiMojo {
-    pub fn library(libname: &str) -> std::io::Result<Self> {
+    pub fn library(libname: &str) -> Result<Self> {
         let lib = DaiMojoLibrary::open(libname)?;
         Ok(Self {lib: Rc::new(lib)})
     }
 
-    pub fn version(&self) -> String {
-        self.lib.version().to_string_lossy().to_string()
+    pub fn version(&self) -> Cow<str> {
+        self.lib.version()
     }
 
-    pub fn pipeline(&self, file: &str) -> error::Result<MojoPipeline> {
+    pub fn pipeline(&self, file: &str) -> Result<MojoPipeline> {
         let mojo_model = self.lib.new_model(&CString::new(file)?, &CString::new("")?);
         Ok(MojoPipeline { lib: self.lib.clone(), mojo_model, })
     }
@@ -68,8 +69,9 @@ impl MojoPipeline {
     }
 
     pub fn create_frame(&self, nrow: usize) -> MojoFrame {
-        let mojo_frame = self.lib.new_frame(self.mojo_model, nrow);
-        MojoFrame { lib: self.lib.clone(), mojo_frame, row_count: nrow}
+        // let mojo_frame = self.lib.new_frame(self.mojo_model, nrow);
+        // MojoFrame { lib: self.lib.clone(), mojo_frame, row_count: nrow}
+        unimplemented!()
     }
 
     pub fn predict(&self, frame: &mut MojoFrame, nrow: usize) -> error::Result<usize> {
@@ -164,13 +166,14 @@ impl Drop for MojoFrame {
 
 #[cfg(test)]
 mod tests {
+    use crate::error;
     use super::DaiMojo;
 
     // const LIBDAIMOJO_SO: &str = "lib/linux_x64/libdaimojo.so";
     const LIBDAIMOJO_SO: &str = "libdaimojo.so";
 
     #[test]
-    fn simple_iris_test() -> std::io::Result<()>{
+    fn simple_iris_test() -> error::Result<()>{
         let daimojo = DaiMojo::library(LIBDAIMOJO_SO)?;
         let version = daimojo.version();
         println!("Library version: {version}");
@@ -184,7 +187,7 @@ mod tests {
         frame.input_f32_mut("petal_len").unwrap()[0] = 1.4;
         frame.input_f32_mut("petal_wid").unwrap()[0] = 0.2;
         log::trace!("ncol before predict: {}", frame.ncol());
-        pipeline.predict(&mut frame, 1);
+        pipeline.predict(&mut frame, 1).unwrap();
         log::trace!("ncol after predict: {}", frame.ncol());
         // present output columns
         let setosa = frame.output_f32("class.Iris-setosa").unwrap()[0];
@@ -198,7 +201,7 @@ mod tests {
     }
 
     #[test]
-    fn simple_wine_test() -> std::io::Result<()> {
+    fn simple_wine_test() -> error::Result<()> {
         let daimojo = DaiMojo::library(LIBDAIMOJO_SO)?;
         let version = daimojo.version();
         println!("Library version: {version}");
@@ -214,7 +217,7 @@ mod tests {
         fa[3] = 8.6;
         fa[4] = 7.3;
         log::trace!("ncol before predict: {}", frame.ncol());
-        pipeline.predict(&mut frame, 5);
+        pipeline.predict(&mut frame, 5).unwrap();
         log::trace!("ncol after predict: {}", frame.ncol());
         // present output columns
         let q3 = &frame.output_f32("quality.3").unwrap()[0..5];

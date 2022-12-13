@@ -2,24 +2,27 @@
 //!
 #![allow(non_snake_case)]
 
-use std::alloc::Layout;
+use std::borrow::Cow;
+use std::ffi::CStr;
+use std::io::ErrorKind;
 use std::os::raw::c_char;
+use std::path::PathBuf;
+
 use dlopen2::wrapper::Container;
 use dlopen2::wrapper::WrapperApi;
-use std::io::ErrorKind;
-use std::ffi::CStr;
-use std::path::PathBuf;
+
+use crate::error;
 
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct MOJO_Model {
     is_valid: bool,
-    uuid: *const char,
+    uuid: *const c_char,
     time_created: u64,
     missing_values_count: usize,
-    missing_values: PCharArray,
+    missing_values: *const *const c_char,
     feature_count: usize,
-    feature_names: PCharArray,
+    feature_names: *const *const c_char,
     feature_types: *const MOJO_DataType,
 }
 
@@ -79,12 +82,12 @@ pub struct DaiMojoBindings {
     MOJO_NewModel: unsafe extern "C" fn(filename: *const c_char, tf_lib_prefix: *const c_char) -> *const MOJO_Model,
     MOJO_DeleteModel: unsafe extern "C" fn(mojo_model: *const MOJO_Model),
     // Pipeline
-    MOJO_NewPipeline: unsafe extern "C" fn(mojo_model: *const MOJO_Model, flags: u32) -> *const MOJO_Pipeline,
+    MOJO_NewPipeline: unsafe extern "C" fn(mojo_model: *const MOJO_Model, flags: u64) -> *const MOJO_Pipeline,
     MOJO_Transform: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, frame: *const MOJO_Frame, nrow: usize, debug: bool),
     /*?for now?*/
-    MOJO_Output_Names: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, index: usize) -> *const c_char,
+    MOJO_Output_Name: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, index: usize) -> *const c_char,
     /*?for now?*/
-    MOJO_Output_Types: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, index: usize) -> *const MOJO_DataType,
+    MOJO_Output_Type: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, index: usize) -> *const MOJO_DataType,
     // Frame
     MOJO_Pipeline_NewFrame: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, nrow: usize) -> *const MOJO_Frame,
     MOJO_DeleteFrame: unsafe extern "C" fn(frame: *const MOJO_Frame),
@@ -95,29 +98,29 @@ pub struct DaiMojoBindings {
 
 pub struct DaiMojoLibrary {
     api: Container<DaiMojoBindings>,
-    version: &'static CStr
+    version: String,
 }
 
 impl DaiMojoLibrary {
 
-    pub fn open(libname: &str) -> Result<Self, std::io::Error> {
+    pub fn open(libname: &str) -> crate::error::Result<Self> {
         let lib = PathBuf::from(libname).canonicalize()?;
         let libname = lib.to_str().expect(&format!("Not a valid unicode pathname: {libname}"));
         let version_api: Container<DaiMojoVersionBindings> = unsafe { Container::load(libname) }
             .map_err(|e| std::io::Error::new(ErrorKind::InvalidInput, format!("{libname}: {e:?}")))?;
-        let version = unsafe { CStr::from_ptr(version_api.mojo_version()) };
+        let version = unsafe { CStr::from_ptr(version_api.mojo_version()) }.to_string_lossy();
 
-        if version.to_bytes()[0] != b'2' {
-            return Err(std::io::Error::new(ErrorKind::InvalidInput, format!("{libname}: Not a supported API inside version '{}'", version.to_string_lossy())))
+        if !version.starts_with("2.") {
+            return Err(error::MojoError::UnsupportedApi(libname.to_string(), version.to_string()));
         }
         let container = unsafe { Container::load(libname) };
-        let api = container
-            .map_err(|e| std::io::Error::new(ErrorKind::InvalidInput, format!("{libname}: {e:?}")))?;
-        Ok(Self { api, version})
+        log::debug!("Version: {version}");
+        let api = container?;
+        Ok(Self { api, version: version.to_string()})
     }
 
-    pub fn version(&self) -> &CStr {
-        self.version
+    pub fn version(&self) -> Cow<str> {
+        Cow::from(&self.version)
     }
 
     pub fn new_model(&self, filename: &CStr, tf_lib_prefix: &CStr) -> *const MOJO_Model {
@@ -130,108 +133,132 @@ impl DaiMojoLibrary {
     }
 
     pub fn uuid(&self, pipeline: *const MOJO_Model) -> &CStr {
-        unsafe { CStr::from_ptr(self.api.MOJO_UUID(pipeline)) }
+        unimplemented!()
     }
 
     pub fn is_valid(&self, pipeline: *const MOJO_Model) -> bool {
-        0 != unsafe { self.api.MOJO_IsValid(pipeline) }
+        unimplemented!()
     }
 
     pub fn time_created(&self, pipeline: *const MOJO_Model) -> u64 {
-        unsafe { self.api.MOJO_TimeCreated(pipeline) }
+        unimplemented!()
     }
 
     pub fn missing_values_num(&self, pipeline: *const MOJO_Model) -> usize {
-        unsafe { self.api.MOJO_MissingValuesNum(pipeline) }
+        unimplemented!()
     }
 
     pub fn missing_values(&self, pipeline: *const MOJO_Model) -> PCharArray {
-        unsafe { self.api.MOJO_MissingValues(pipeline) }
+        unimplemented!()
     }
 
     pub fn feature_num(&self, pipeline: *const MOJO_Model) -> usize {
-        unsafe { self.api.MOJO_FeatureNum(pipeline) }
+        unimplemented!()
     }
 
     pub fn feature_names(&self, pipeline: *const MOJO_Model) -> PCharArray {
-        unsafe { self.api.MOJO_FeatureNames(pipeline) }
+        unimplemented!()
     }
 
     pub fn feature_types(&self, pipeline: *const MOJO_Model) -> *const MOJO_DataType {
-        unsafe { self.api.MOJO_FeatureTypes(pipeline) }
+        unimplemented!()
     }
 
     pub fn output_num(&self, pipeline: *const MOJO_Model) -> usize {
-        unsafe { self.api.MOJO_OutputNum(pipeline) }
+        unimplemented!()
     }
 
     pub fn output_names(&self, pipeline: *const MOJO_Model) -> PCharArray {
-        unsafe { self.api.MOJO_OutputNames(pipeline) }
+        unimplemented!()
     }
 
     pub fn output_types(&self, pipeline: *const MOJO_Model) -> *const MOJO_DataType {
-        unsafe { self.api.MOJO_OutputTypes(pipeline) }
+        unimplemented!()
     }
 
     pub fn predict(&self, pipeline: *const MOJO_Model, frame: *const MOJO_Frame, nrow: usize) {
-        unsafe { self.api.MOJO_Pipeline_Predict(pipeline, frame, nrow) }
+        unimplemented!()
     }
 
-    pub fn new_frame(&self, pipeline: *const MOJO_Model, nrow: usize) -> *const MOJO_Frame {
-        unsafe { self.api.MOJO_Pipeline_NewFrame(pipeline, nrow) }
+    pub fn new_frame(&self, pipeline: *const MOJO_Pipeline, nrow: usize) -> *const MOJO_Frame {
+        unimplemented!()
     }
 
     pub fn delete_frame(&self, frame: *const MOJO_Frame) {
-        unsafe { self.api.MOJO_DeleteFrame(frame)}
+        unimplemented!()
     }
 
     pub fn frame_get_row_count(&self, frame: *const MOJO_Frame) -> usize {
-        unsafe { self.api.MOJO_Frame_GetRowCount(frame) }
+        unimplemented!()
     }
 
-    pub fn get_col_by_name(&self, frame: *const MOJO_Frame, colname: *const c_char) -> *const MOJO_Col {
-        unsafe { self.api.MOJO_GetColByName(frame, colname)}
-    }
 
     pub fn frame_ncol(&self, frame: *const MOJO_Frame) -> usize {
-        unsafe { self.api.MOJO_FrameNcol(frame) }
-    }
-
-    pub fn new_col(&self, datatype: MOJO_DataType, size: usize) -> *const MOJO_Col {
-        //TODO: Bad! the implementation should itself allocate the memory, because Rust has its own allocator
-        // and it's not integrated with the one from the library
-        let data = Self::alloc_data(&datatype, size);
-        unsafe { self.api.MOJO_NewCol(datatype, size, data) }
-    }
-
-    fn alloc_data(datatype: &MOJO_DataType, size: usize) -> *mut u8 {
-        let layout = match datatype {
-            MOJO_DataType::MOJO_FLOAT => Layout::array::<f32>(size),
-            MOJO_DataType::MOJO_DOUBLE => Layout::array::<f64>(size),
-            MOJO_DataType::MOJO_INT32 => Layout::array::<i32>(size),
-            MOJO_DataType::MOJO_INT64 => Layout::array::<i64>(size),
-            MOJO_DataType::MOJO_STRING => Layout::array::<*const c_char>(size),
-            _ => panic!("Unsupported type")
-        };
-        let layout = layout.expect("Invalid memory layout");
-        unsafe { std::alloc::alloc_zeroed(layout) }
+        unimplemented!()
     }
 
     pub fn column_buffer(&self, frame: *const MOJO_Frame, colname: *const c_char) -> *mut u8 {
-        unsafe { self.api.MOJO_Column_Buffer(frame, colname) }
+        unimplemented!()
+    }
+}
+
+
+pub struct RawColumnMeta<'a> {
+    name: Cow<'a, str>,
+    column_type: MOJO_DataType,
+}
+
+pub struct RawModel<'a> {
+    lib: &'a DaiMojoLibrary,
+    mojo_model: *const MOJO_Model,
+    pub is_valid: bool,
+    pub uuid: Cow<'a, str>,
+    pub time_created: u64,
+    pub missing_values: Vec<Cow<'a, str>>,
+    pub features: Vec<RawColumnMeta<'a>>,
+}
+
+impl<'a> RawModel<'a> {
+    pub fn load_model(lib: &'a DaiMojoLibrary, filename: &CStr, tf_lib_prefix: &CStr) -> std::io::Result<Self> {
+        let model_ptr = unsafe {
+            lib.api.MOJO_NewModel(filename.as_ptr(), tf_lib_prefix.as_ptr())
+        };
+        if model_ptr.is_null() {
+            return Err(std::io::Error::new(ErrorKind::NotFound, format!("File not found: {}", filename.to_string_lossy())));
+        }
+        unsafe {
+            let missing_values: Vec<Cow<str>> = (*model_ptr).missing_values
+                .to_slice((*model_ptr).missing_values_count)
+                .iter()
+                .map(|x| CStr::from_ptr(*x).to_string_lossy())
+                .collect();
+            let mut features = Vec::with_capacity((*model_ptr).feature_count);
+            let mut pname = (*model_ptr).feature_names;
+            let mut ptype = (*model_ptr).feature_types;
+            for _ in 0..(*model_ptr).feature_count {
+                let col = RawColumnMeta { name: CStr::from_ptr(pname.read()).to_string_lossy(), column_type: ptype.read() };
+                features.push(col);
+                pname = pname.add(1);
+                ptype = ptype.add(1);
+            }
+            Ok(Self {
+                lib,
+                mojo_model: model_ptr,
+                is_valid: (*model_ptr).is_valid,
+                uuid: CStr::from_ptr((*model_ptr).uuid).to_string_lossy(),
+                time_created: (*model_ptr).time_created,
+                missing_values,
+                features,
+            })
+        }
     }
 
-    pub fn _delete_col(&self, col: *const MOJO_Col) {
-        unsafe { self.api.MOJO_DeleteCol(col) }
-    }
+}
 
-    #[deprecated]
-    pub fn data(&self, col: *const MOJO_Col) -> *mut u8 {
-        unsafe { self.api.MOJO_Data(col) }
-    }
-
-    pub fn _datatype(&self, col: *const MOJO_Col) -> MOJO_DataType {
-        unsafe { self.api.MOJO_Type(col) }
+impl <'a> Drop for RawModel<'a> {
+    fn drop(&mut self) {
+        log::trace!("calling MOJO_DeleteModel()");
+        unsafe { self.lib.api.MOJO_DeleteModel(self.mojo_model) }
     }
 }
 
@@ -276,41 +303,32 @@ impl PCharArrayOperations for PCharArray {
 mod tests {
     use std::ffi::CString;
     use std::path::PathBuf;
-    use super::{DaiMojoLibrary, PArrayOperations, PCharArrayOperations};
 
-    // const LIBDAIMOJO_SO: &str = "lib/linux_x64/libdaimojo.so";
+    use super::{DaiMojoLibrary, RawModel};
+
+    // const LIBDAIMOJO_SO: &str = "/home/pk/h2o/mojo2/cpp/build/libdaimojo.so";
     const LIBDAIMOJO_SO: &str = "libdaimojo.so";
 
     #[test]
     fn iris() {
         let lib = DaiMojoLibrary::open(LIBDAIMOJO_SO).unwrap();
-        let version = lib.version().to_string_lossy();
+        let version = lib.version();
         println!("version: {version}");
 
         let filename = PathBuf::from("../mojo2/data/iris/pipeline.mojo");
         let filename = CString::new(filename.to_string_lossy().as_ref()).unwrap();
-        let pipeline = lib.new_model(filename.as_ref(), CString::new("").unwrap().as_ref());
-        println!("UUID: {}", lib.uuid(pipeline).to_string_lossy());
-        println!("IsValid: {}", lib.is_valid(pipeline));
-        println!("TimeCreated: {}", lib.time_created(pipeline));
-        let missing_values = lib.missing_values(pipeline).to_vec_string(lib.missing_values_num(pipeline));
+        let model = RawModel::load_model(&lib, filename.as_ref(), CString::new("").unwrap().as_ref()).unwrap();
+
+        println!("UUID: {}", model.uuid);
+        println!("IsValid: {}", model.is_valid);
+        println!("TimeCreated: {}", model.time_created);
+        let missing_values = &model.missing_values;
         println!("Missing values>: {}", missing_values.join(", "));
-        let icnt = lib.feature_num(pipeline);
-        println!("Features[{icnt}]:");
-        let names = lib.feature_names(pipeline).to_vec_string(icnt);
-        let types = lib.feature_types(pipeline).to_slice(icnt);
-        for i in 0..icnt {
-            println!("* {} : {:?}", &names[i], types[i]);
+        println!("Features[{}]:", model.features.len());
+        for column in &model.features {
+            println!("* {} : {:?}", column.name, column.column_type);
         }
-        let ocnt = lib.output_num(pipeline);
-        println!("Outputs[{ocnt}]:");
-        let names = lib.output_names(pipeline).to_vec_string(ocnt);
-        let types = lib.output_types(pipeline).to_slice(ocnt);
-        for i in 0..ocnt {
-            println!("* {} : {:?}", &names[i], types[i]);
-        }
+        //TODO: outputs
         //
-        lib.delete_model(pipeline);
-        println!("deleted");
     }
 }
