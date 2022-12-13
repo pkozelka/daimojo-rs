@@ -11,7 +11,25 @@ use std::ffi::CStr;
 use std::path::PathBuf;
 
 #[allow(non_camel_case_types)]
-pub struct MOJO_Model {}
+#[repr(C)]
+pub struct MOJO_Model {
+    is_valid: bool,
+    uuid: *const char,
+    time_created: u64,
+    missing_values_count: usize,
+    missing_values: PCharArray,
+    feature_count: usize,
+    feature_names: PCharArray,
+    feature_types: *const MOJO_DataType,
+}
+
+#[allow(non_camel_case_types)]
+#[repr(C)]
+pub struct MOJO_Pipeline {
+    model: *const MOJO_Model,
+    flags: u32,
+    output_count: usize,
+}
 
 #[allow(non_camel_case_types)]
 pub struct MOJO_Frame {}
@@ -35,6 +53,20 @@ pub enum MOJO_DataType {
     MOJO_STRING = 6,
 }
 
+#[allow(non_camel_case_types)]
+#[repr(C)]
+#[derive(Copy,Clone,Debug)]
+pub enum MOJO_Transform_Flags {
+    /// normal prediction
+    PREDICT = 1 << 0,
+    /// prediction interval
+    INTERVAL = 1 << 1,
+    /// SHAP values
+    CONTRIBS_RAW = 1 << 2,
+    /// SHAP values mapped to original features
+    CONTRIBS_ORIGINAL = 1 << 3,
+}
+
 #[derive(dlopen2_derive::WrapperApi)]
 pub struct DaiMojoVersionBindings {
     #[dlopen2_name = "MOJO_Version"]
@@ -45,40 +77,20 @@ pub struct DaiMojoVersionBindings {
 pub struct DaiMojoBindings {
     // Model
     MOJO_NewModel: unsafe extern "C" fn(filename: *const c_char, tf_lib_prefix: *const c_char) -> *const MOJO_Model,
-    MOJO_DeleteModel: unsafe extern "C" fn(pipeline: *const MOJO_Model),
-    MOJO_UUID: unsafe extern "C" fn(pipeline: *const MOJO_Model) -> *const c_char,
-    MOJO_IsValid: unsafe extern "C" fn(pipeline: *const MOJO_Model) -> i32,
-    MOJO_TimeCreated: unsafe extern "C" fn(pipeline: *const MOJO_Model) -> u64,
-    MOJO_MissingValuesNum: unsafe extern "C" fn(pipeline: *const MOJO_Model) -> usize,
-    MOJO_MissingValues: unsafe extern "C" fn(pipeline: *const MOJO_Model) -> PCharArray,
-    MOJO_FeatureNum: unsafe extern "C" fn(pipeline: *const MOJO_Model) -> usize,
-    MOJO_FeatureNames: unsafe extern "C" fn(pipeline: *const MOJO_Model) -> PCharArray,
-    MOJO_FeatureTypes: unsafe extern "C" fn(pipeline: *const MOJO_Model) -> *const MOJO_DataType,
-    MOJO_OutputNum: unsafe extern "C" fn(pipeline: *const MOJO_Model) -> usize,
-    MOJO_OutputNames: unsafe extern "C" fn(pipeline: *const MOJO_Model) -> PCharArray,
-    MOJO_OutputTypes: unsafe extern "C" fn(pipeline: *const MOJO_Model) -> *const MOJO_DataType,
-    MOJO_Pipeline_Predict: unsafe extern "C" fn(pipeline: *const MOJO_Model, frame: *const MOJO_Frame, nrow: usize),
-    //TODO MOJO_Pipeline_Predict: unsafe extern "C" fn(pipeline: *const MOJO_Model, frame: *const MOJO_Frame, config: *const MOJO_Config),
-    //TODO MOJO_Config_New()
-    //TODO MOJO_Config_Delete(config: *mut MOJO_Config)
-    //TODO MOJO_Config_Set(config: *mut MOJO_Config, key: PChar, value: PChar) -> bool,
+    MOJO_DeleteModel: unsafe extern "C" fn(mojo_model: *const MOJO_Model),
+    // Pipeline
+    MOJO_NewPipeline: unsafe extern "C" fn(mojo_model: *const MOJO_Model, flags: u32) -> *const MOJO_Pipeline,
+    MOJO_Transform: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, frame: *const MOJO_Frame, nrow: usize, debug: bool),
+    /*?for now?*/
+    MOJO_Output_Names: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, index: usize) -> *const c_char,
+    /*?for now?*/
+    MOJO_Output_Types: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, index: usize) -> *const MOJO_DataType,
     // Frame
-    MOJO_Pipeline_NewFrame: unsafe extern "C" fn(pipeline: *const MOJO_Model, nrow: usize) -> *const MOJO_Frame,
+    MOJO_Pipeline_NewFrame: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, nrow: usize) -> *const MOJO_Frame,
     MOJO_DeleteFrame: unsafe extern "C" fn(frame: *const MOJO_Frame),
     MOJO_FrameNcol: unsafe extern "C" fn(frame: *const MOJO_Frame) -> usize,
-    MOJO_Frame_GetRowCount: unsafe extern "C" fn(frame: *const MOJO_Frame) -> usize,
-    //TODO MOJO_Frame_EffectiveRowCount: unsafe extern "C" fn(frame: *const MOJO_Frame, count: usize) -> usize,
-    MOJO_Column_Buffer: unsafe extern "C" fn(frame: *const MOJO_Frame, colname: *const c_char) -> *mut u8,
-    // DEPRECATED APIS
-    // Column
-    MOJO_NewCol: unsafe extern "C" fn(datatype: MOJO_DataType, size: usize, data: *mut u8) -> *const MOJO_Col,
-    MOJO_DeleteCol: unsafe extern "C" fn(col: *const MOJO_Col),
-    MOJO_Type: unsafe extern "C" fn(col: *const MOJO_Col) -> MOJO_DataType,
-    MOJO_Data: unsafe extern "C" fn(col: *const MOJO_Col) -> *mut u8,
-    //
-    MOJO_Predict: unsafe extern "C" fn(pipeline: *const MOJO_Model, frame: *const MOJO_Frame),
-    MOJO_NewFrame: unsafe extern "C" fn(cols: *const *const MOJO_Col, names: PCharArray, count: usize) -> *const MOJO_Frame,
-    MOJO_GetColByName: unsafe extern "C" fn(frame: *const MOJO_Frame, colname: *const c_char) -> *const MOJO_Col,
+    MOJO_Input_Data: unsafe extern "C" fn(frame: *const MOJO_Frame, colname: *const c_char) -> *mut u8,
+    MOJO_Output_Data: unsafe extern "C" fn(frame: *const MOJO_Frame, colname: *const c_char) -> *mut u8,
 }
 
 pub struct DaiMojoLibrary {
