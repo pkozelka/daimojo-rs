@@ -124,83 +124,6 @@ impl DaiMojoLibrary {
     pub fn version(&self) -> Cow<str> {
         Cow::from(&self.version)
     }
-
-    pub fn new_model(&self, filename: &CStr, tf_lib_prefix: &CStr) -> *const MOJO_Model {
-        unsafe {
-            self.api.MOJO_NewModel(filename.as_ptr(), tf_lib_prefix.as_ptr())
-        }
-    }
-    pub fn delete_model(&self, pipeline: *const MOJO_Model) {
-        unsafe { self.api.MOJO_DeleteModel(pipeline) }
-    }
-
-    pub fn uuid(&self, _pipeline: *const MOJO_Model) -> &CStr {
-        unimplemented!()
-    }
-
-    pub fn is_valid(&self, _pipeline: *const MOJO_Model) -> bool {
-        unimplemented!()
-    }
-
-    pub fn time_created(&self, _pipeline: *const MOJO_Model) -> u64 {
-        unimplemented!()
-    }
-
-    pub fn missing_values_num(&self, _pipeline: *const MOJO_Model) -> usize {
-        unimplemented!()
-    }
-
-    pub fn missing_values(&self, _pipeline: *const MOJO_Model) -> PCharArray {
-        unimplemented!()
-    }
-
-    pub fn feature_num(&self, _pipeline: *const MOJO_Model) -> usize {
-        unimplemented!()
-    }
-
-    pub fn feature_names(&self, _pipeline: *const MOJO_Model) -> PCharArray {
-        unimplemented!()
-    }
-
-    pub fn feature_types(&self, _pipeline: *const MOJO_Model) -> *const MOJO_DataType {
-        unimplemented!()
-    }
-
-    pub fn output_num(&self, _pipeline: *const MOJO_Model) -> usize {
-        unimplemented!()
-    }
-
-    pub fn output_names(&self, _pipeline: *const MOJO_Model) -> PCharArray {
-        unimplemented!()
-    }
-
-    pub fn output_types(&self, _pipeline: *const MOJO_Model) -> *const MOJO_DataType {
-        unimplemented!()
-    }
-
-    pub fn predict(&self, _pipeline: *const MOJO_Model, _frame: *const MOJO_Frame, _nrow: usize) {
-        unimplemented!()
-    }
-
-    pub fn new_frame(&self, _pipeline: *const MOJO_Pipeline, _nrow: usize) -> *const MOJO_Frame {
-        unimplemented!()
-    }
-
-    pub fn delete_frame(&self, _frame: *const MOJO_Frame) {
-        unimplemented!()
-    }
-
-    pub fn frame_get_row_count(&self, _frame: *const MOJO_Frame) -> usize {
-        unimplemented!()
-    }
-
-    pub fn frame_ncol(&self, _frame: *const MOJO_Frame) -> usize {
-        unimplemented!()
-    }
-
-    pub fn column_buffer(&self, _frame: *const MOJO_Frame, _colname: *const c_char) -> *mut u8 {
-        unimplemented!()
-    }
 }
 
 pub type RawFlags = u32;
@@ -388,43 +311,6 @@ fn columns_from<'a>(count: usize, mut pname: *const *const c_char, mut ptype: *c
         }
     }
     columns
-}
-
-pub trait PArrayOperations<T> {
-    fn to_slice<'a>(&self, count: usize) -> &'a [T];
-}
-
-impl <T> PArrayOperations<T> for *const T {
-    fn to_slice<'a>(&self, count: usize) -> &'a [T] {
-        unsafe { std::slice::from_raw_parts(*self, count) }
-    }
-}
-
-pub trait PCharArrayOperations {
-    fn to_vec_cstr<'a>(&self, count: usize) -> Vec<&'a CStr>;
-    fn to_vec_string(&self, count: usize) -> Vec<String>;
-}
-
-impl PCharArrayOperations for PCharArray {
-    fn to_vec_cstr<'a>(&self, count: usize) -> Vec<&'a CStr> {
-        let mut vec = Vec::new();
-        let slice = self.to_slice(count);
-        for &p in slice {
-            let s = unsafe { CStr::from_ptr(p) };
-            vec.push(s);
-        }
-        vec
-    }
-
-    fn to_vec_string(&self, count: usize) -> Vec<String> {
-        let mut vec = Vec::new();
-        let slice = self.to_slice(count);
-        for &p in slice {
-            let s = unsafe { CStr::from_ptr(p) }.to_string_lossy().to_string();
-            vec.push(s);
-        }
-        vec
-    }
 }
 
 #[cfg(test)]
