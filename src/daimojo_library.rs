@@ -94,8 +94,8 @@ pub struct DaiMojoBindings {
     MOJO_Pipeline_NewFrame: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, nrow: usize) -> *const MOJO_Frame,
     MOJO_DeleteFrame: unsafe extern "C" fn(frame: *const MOJO_Frame),
     MOJO_FrameNcol: unsafe extern "C" fn(frame: *const MOJO_Frame) -> usize,
-    MOJO_Input_Data: unsafe extern "C" fn(frame: *const MOJO_Frame, colname: *const c_char) -> *mut u8,
-    MOJO_Output_Data: unsafe extern "C" fn(frame: *const MOJO_Frame, colname: *const c_char) -> *mut u8,
+    MOJO_Input_Data: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, frame: *const MOJO_Frame, index: usize) -> *mut u8,
+    MOJO_Output_Data: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, frame: *const MOJO_Frame, index: usize) -> *const u8,
 }
 
 pub struct DaiMojoLibrary {
@@ -223,9 +223,7 @@ impl<'a> RawModel<'a> {
         if model_ptr.is_null() {
             return Err(std::io::Error::new(ErrorKind::NotFound, format!("File not found: {}", filename.to_string_lossy())));
         }
-        unsafe {
-            Ok(Self { lib, model_ptr, })
-        }
+        Ok(Self { lib, model_ptr, })
     }
 
     #[inline]
@@ -260,8 +258,8 @@ impl<'a> RawModel<'a> {
     pub fn features(&self) -> Vec<RawColumnMeta<'a>> {
         unsafe {
             let count = (*self.model_ptr).feature_count;
-            let mut pname = (*self.model_ptr).feature_names;
-            let mut ptype = (*self.model_ptr).feature_types;
+            let pname = (*self.model_ptr).feature_names;
+            let ptype = (*self.model_ptr).feature_types;
             columns_from(count, pname, ptype)
         }
     }
@@ -277,7 +275,6 @@ impl <'a> Drop for RawModel<'a> {
 pub struct RawPipeline<'a> {
     lib: &'a DaiMojoLibrary,
     pipeline_ptr: *const MOJO_Pipeline,
-    model: &'a RawModel<'a>,
 }
 
 impl<'a> RawPipeline<'a> {
@@ -286,7 +283,6 @@ impl<'a> RawPipeline<'a> {
         Ok(Self {
             lib: model.lib,
             pipeline_ptr,
-            model,
         })
     }
 
@@ -295,12 +291,10 @@ impl<'a> RawPipeline<'a> {
             let count = (*self.pipeline_ptr).output_count;
             let mut columns = Vec::with_capacity(count);
             for i in 0..count {
-                unsafe {
-                    let cname = self.lib.api.MOJO_Output_Name(self.pipeline_ptr, i);
-                    let cname = CStr::from_ptr(cname).to_string_lossy();
-                    let ctype = self.lib.api.MOJO_Output_Type(self.pipeline_ptr, i);
-                    columns.push(RawColumnMeta { name: cname, column_type: ctype });
-                }
+                let cname = self.lib.api.MOJO_Output_Name(self.pipeline_ptr, i);
+                let cname = CStr::from_ptr(cname).to_string_lossy();
+                let ctype = self.lib.api.MOJO_Output_Type(self.pipeline_ptr, i);
+                columns.push(RawColumnMeta { name: cname, column_type: ctype });
             }
             columns
         }
@@ -310,6 +304,46 @@ impl<'a> RawPipeline<'a> {
 impl<'a> Drop for RawPipeline<'a> {
     fn drop(&mut self) {
         unsafe { self.lib.api.MOJO_DeletePipeline(self.pipeline_ptr); }
+    }
+}
+
+pub struct RawFrame<'a> {
+    lib: &'a DaiMojoLibrary,
+    frame_ptr: *const MOJO_Frame,
+    pipeline_ptr: *const MOJO_Pipeline,
+}
+
+impl<'a> RawFrame<'a> {
+    pub fn new(pipeline: &'a RawPipeline, nrow: usize) -> error::Result<RawFrame<'a>> {
+        let pipeline_ptr = pipeline.pipeline_ptr;
+        let frame_ptr = unsafe { pipeline.lib.api.MOJO_Pipeline_NewFrame(pipeline_ptr, nrow) };
+        Ok(Self {
+            lib: pipeline.lib,
+            frame_ptr,
+            pipeline_ptr,
+        })
+    }
+
+    pub fn ncol(&self) -> usize {
+        unsafe { self.lib.api.MOJO_FrameNcol(self.frame_ptr) }
+    }
+
+    pub unsafe fn input_data(&self, index: usize) -> *mut u8 {
+        unsafe {
+            self.lib.api.MOJO_Input_Data(self.pipeline_ptr, self.frame_ptr, index)
+        }
+    }
+
+    pub unsafe fn output_data(&self, index: usize) -> *const u8 {
+        unsafe {
+            self.lib.api.MOJO_Output_Data(self.pipeline_ptr, self.frame_ptr, index)
+        }
+    }
+}
+
+impl<'a> Drop for RawFrame<'a> {
+    fn drop(&mut self) {
+        unsafe { self.lib.api.MOJO_DeleteFrame(self.frame_ptr) };
     }
 }
 

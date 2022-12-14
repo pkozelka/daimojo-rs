@@ -68,7 +68,7 @@ impl MojoPipeline {
         result
     }
 
-    pub fn create_frame(&self, nrow: usize) -> MojoFrame {
+    pub fn create_frame(&self, _nrow: usize) -> MojoFrame {
         // let mojo_frame = self.lib.new_frame(self.mojo_model, nrow);
         // MojoFrame { lib: self.lib.clone(), mojo_frame, row_count: nrow}
         unimplemented!()
