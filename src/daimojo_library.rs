@@ -7,8 +7,7 @@ use std::ffi::CStr;
 use std::io::ErrorKind;
 use std::os::raw::c_char;
 use std::path::PathBuf;
-use std::time::SystemTime;
-use chrono::{DateTime, Duration, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 
 use dlopen2::wrapper::Container;
 use dlopen2::wrapper::WrapperApi;
@@ -84,12 +83,13 @@ pub struct DaiMojoBindings {
     MOJO_NewModel: unsafe extern "C" fn(filename: *const c_char, tf_lib_prefix: *const c_char) -> *const MOJO_Model,
     MOJO_DeleteModel: unsafe extern "C" fn(mojo_model: *const MOJO_Model),
     // Pipeline
-    MOJO_NewPipeline: unsafe extern "C" fn(mojo_model: *const MOJO_Model, flags: u64) -> *const MOJO_Pipeline,
+    MOJO_NewPipeline: unsafe extern "C" fn(mojo_model: *const MOJO_Model, flags: RawFlags) -> *const MOJO_Pipeline,
+    MOJO_DeletePipeline: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline),
     MOJO_Transform: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, frame: *const MOJO_Frame, nrow: usize, debug: bool),
     /*?for now?*/
     MOJO_Output_Name: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, index: usize) -> *const c_char,
     /*?for now?*/
-    MOJO_Output_Type: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, index: usize) -> *const MOJO_DataType,
+    MOJO_Output_Type: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, index: usize) -> MOJO_DataType,
     // Frame
     MOJO_Pipeline_NewFrame: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, nrow: usize) -> *const MOJO_Frame,
     MOJO_DeleteFrame: unsafe extern "C" fn(frame: *const MOJO_Frame),
@@ -203,6 +203,7 @@ impl DaiMojoLibrary {
     }
 }
 
+type RawFlags = u64;
 
 pub struct RawColumnMeta<'a> {
     pub name: Cow<'a, str>,
@@ -238,7 +239,7 @@ impl<'a> RawModel<'a> {
 
     pub fn time_created_utc(&self) -> DateTime<Utc> {
         let time_created = unsafe { (*self.model_ptr).time_created };
-        let n = NaiveDateTime::from_timestamp(time_created as i64, 0);
+        let n = NaiveDateTime::from_timestamp_opt(time_created as i64, 0).unwrap();
         DateTime::from_utc(n, Utc)
     }
 
@@ -270,6 +271,45 @@ impl <'a> Drop for RawModel<'a> {
     fn drop(&mut self) {
         log::trace!("calling MOJO_DeleteModel()");
         unsafe { self.lib.api.MOJO_DeleteModel(self.model_ptr) }
+    }
+}
+
+pub struct RawPipeline<'a> {
+    lib: &'a DaiMojoLibrary,
+    pipeline_ptr: *const MOJO_Pipeline,
+    model: &'a RawModel<'a>,
+}
+
+impl<'a> RawPipeline<'a> {
+    pub fn new(model: &'a RawModel, flags: RawFlags) -> error::Result<Self> {
+        let pipeline_ptr = unsafe { model.lib.api.MOJO_NewPipeline(model.model_ptr, flags)};
+        Ok(Self {
+            lib: model.lib,
+            pipeline_ptr,
+            model,
+        })
+    }
+
+    pub fn outputs(&self) -> Vec<RawColumnMeta<'a>> {
+        unsafe {
+            let count = (*self.pipeline_ptr).output_count;
+            let mut columns = Vec::with_capacity(count);
+            for i in 0..count {
+                unsafe {
+                    let cname = self.lib.api.MOJO_Output_Name(self.pipeline_ptr, i);
+                    let cname = CStr::from_ptr(cname).to_string_lossy();
+                    let ctype = self.lib.api.MOJO_Output_Type(self.pipeline_ptr, i);
+                    columns.push(RawColumnMeta { name: cname, column_type: ctype });
+                }
+            }
+            columns
+        }
+    }
+}
+
+impl<'a> Drop for RawPipeline<'a> {
+    fn drop(&mut self) {
+        unsafe { self.lib.api.MOJO_DeletePipeline(self.pipeline_ptr); }
     }
 }
 
@@ -328,6 +368,7 @@ impl PCharArrayOperations for PCharArray {
 mod tests {
     use std::ffi::CString;
     use std::path::PathBuf;
+    use crate::daimojo_library::{MOJO_Transform_Flags, RawFlags, RawPipeline};
 
     use super::{DaiMojoLibrary, RawModel};
 
@@ -354,7 +395,13 @@ mod tests {
         for column in &features {
             println!("* {} : {:?}", column.name, column.column_type);
         }
-        //TODO: outputs
+        let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as RawFlags).unwrap();
+        // outputs
+        let outputs = pipeline.outputs();
+        println!("Outputs[{}]:", outputs.len());
+        for column in &outputs {
+            println!("* {} : {:?}", column.name, column.column_type);
+        }
         //
     }
 }
