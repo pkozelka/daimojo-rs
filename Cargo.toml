@@ -14,6 +14,7 @@ pretty_env_logger = "0.4.0"
 csv = "1.1.6"
 thiserror = "=1.0.35"
 anyhow = "=1.0.65"
+chrono = "0.4.23"
 
 [profile.release]
 opt-level = 'z' # Optimize for size

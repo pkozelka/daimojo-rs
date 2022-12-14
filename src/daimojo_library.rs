@@ -7,6 +7,8 @@ use std::ffi::CStr;
 use std::io::ErrorKind;
 use std::os::raw::c_char;
 use std::path::PathBuf;
+use std::time::SystemTime;
+use chrono::{DateTime, Duration, NaiveDateTime, TimeZone, Utc};
 
 use dlopen2::wrapper::Container;
 use dlopen2::wrapper::WrapperApi;
@@ -192,7 +194,6 @@ impl DaiMojoLibrary {
         unimplemented!()
     }
 
-
     pub fn frame_ncol(&self, frame: *const MOJO_Frame) -> usize {
         unimplemented!()
     }
@@ -204,22 +205,17 @@ impl DaiMojoLibrary {
 
 
 pub struct RawColumnMeta<'a> {
-    name: Cow<'a, str>,
-    column_type: MOJO_DataType,
+    pub name: Cow<'a, str>,
+    pub column_type: MOJO_DataType,
 }
 
 pub struct RawModel<'a> {
     lib: &'a DaiMojoLibrary,
-    mojo_model: *const MOJO_Model,
-    pub is_valid: bool,
-    pub uuid: Cow<'a, str>,
-    pub time_created: u64,
-    pub missing_values: Vec<Cow<'a, str>>,
-    pub features: Vec<RawColumnMeta<'a>>,
+    model_ptr: *const MOJO_Model,
 }
 
 impl<'a> RawModel<'a> {
-    pub fn load_model(lib: &'a DaiMojoLibrary, filename: &CStr, tf_lib_prefix: &CStr) -> std::io::Result<Self> {
+    pub fn load(lib: &'a DaiMojoLibrary, filename: &CStr, tf_lib_prefix: &CStr) -> std::io::Result<Self> {
         let model_ptr = unsafe {
             lib.api.MOJO_NewModel(filename.as_ptr(), tf_lib_prefix.as_ptr())
         };
@@ -227,39 +223,68 @@ impl<'a> RawModel<'a> {
             return Err(std::io::Error::new(ErrorKind::NotFound, format!("File not found: {}", filename.to_string_lossy())));
         }
         unsafe {
-            let missing_values: Vec<Cow<str>> = (*model_ptr).missing_values
-                .to_slice((*model_ptr).missing_values_count)
-                .iter()
-                .map(|x| CStr::from_ptr(*x).to_string_lossy())
-                .collect();
-            let mut features = Vec::with_capacity((*model_ptr).feature_count);
-            let mut pname = (*model_ptr).feature_names;
-            let mut ptype = (*model_ptr).feature_types;
-            for _ in 0..(*model_ptr).feature_count {
-                let col = RawColumnMeta { name: CStr::from_ptr(pname.read()).to_string_lossy(), column_type: ptype.read() };
-                features.push(col);
-                pname = pname.add(1);
-                ptype = ptype.add(1);
-            }
-            Ok(Self {
-                lib,
-                mojo_model: model_ptr,
-                is_valid: (*model_ptr).is_valid,
-                uuid: CStr::from_ptr((*model_ptr).uuid).to_string_lossy(),
-                time_created: (*model_ptr).time_created,
-                missing_values,
-                features,
-            })
+            Ok(Self { lib, model_ptr, })
         }
     }
 
+    #[inline]
+    pub fn is_valid(&self) -> bool {
+        unsafe { (*self.model_ptr).is_valid }
+    }
+
+    pub fn uuid(&self) -> Cow<str> {
+        unsafe { CStr::from_ptr((*self.model_ptr).uuid) }.to_string_lossy()
+    }
+
+    pub fn time_created_utc(&self) -> DateTime<Utc> {
+        let time_created = unsafe { (*self.model_ptr).time_created };
+        let n = NaiveDateTime::from_timestamp(time_created as i64, 0);
+        DateTime::from_utc(n, Utc)
+    }
+
+    pub fn missing_values(&self) -> Vec<Cow<str>> {
+        unsafe {
+            let count = (*self.model_ptr).missing_values_count;
+            let mut vec = Vec::with_capacity(count);
+            let mut p = (*self.model_ptr).missing_values;
+            for _ in 0..count {
+                let s = CStr::from_ptr(p.read()).to_string_lossy();
+                p = p.add(1);
+                vec.push(s);
+            }
+            vec
+        }
+    }
+
+    pub fn features(&self) -> Vec<RawColumnMeta<'a>> {
+        unsafe {
+            let count = (*self.model_ptr).feature_count;
+            let mut pname = (*self.model_ptr).feature_names;
+            let mut ptype = (*self.model_ptr).feature_types;
+            columns_from(count, pname, ptype)
+        }
+    }
 }
 
 impl <'a> Drop for RawModel<'a> {
     fn drop(&mut self) {
         log::trace!("calling MOJO_DeleteModel()");
-        unsafe { self.lib.api.MOJO_DeleteModel(self.mojo_model) }
+        unsafe { self.lib.api.MOJO_DeleteModel(self.model_ptr) }
     }
+}
+
+fn columns_from<'a>(count: usize, mut pname: *const *const c_char, mut ptype: *const MOJO_DataType) -> Vec<RawColumnMeta<'a>> {
+    let mut columns = Vec::with_capacity(count);
+    for _ in 0..count {
+        unsafe {
+            let cname = CStr::from_ptr(pname.read()).to_string_lossy();
+            pname = pname.add(1);
+            let ctype = ptype.read();
+            ptype = ptype.add(1);
+            columns.push(RawColumnMeta { name: cname, column_type: ctype });
+        }
+    }
+    columns
 }
 
 pub trait PArrayOperations<T> {
@@ -317,15 +342,16 @@ mod tests {
 
         let filename = PathBuf::from("../mojo2/data/iris/pipeline.mojo");
         let filename = CString::new(filename.to_string_lossy().as_ref()).unwrap();
-        let model = RawModel::load_model(&lib, filename.as_ref(), CString::new("").unwrap().as_ref()).unwrap();
+        let model = RawModel::load(&lib, filename.as_ref(), CString::new("").unwrap().as_ref()).unwrap();
 
-        println!("UUID: {}", model.uuid);
-        println!("IsValid: {}", model.is_valid);
-        println!("TimeCreated: {}", model.time_created);
-        let missing_values = &model.missing_values;
-        println!("Missing values>: {}", missing_values.join(", "));
-        println!("Features[{}]:", model.features.len());
-        for column in &model.features {
+        println!("UUID: {}", model.uuid());
+        println!("IsValid: {}", model.is_valid());
+        println!("TimeCreated: {}", model.time_created_utc());
+        let missing_values = &model.missing_values();
+        println!("Missing values[{}]: {}", missing_values.len(), missing_values.join(", "));
+        let features = model.features();
+        println!("Features[{}]:", features.len());
+        for column in &features {
             println!("* {} : {:?}", column.name, column.column_type);
         }
         //TODO: outputs
