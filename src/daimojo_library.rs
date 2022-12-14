@@ -285,7 +285,7 @@ impl<'a> RawFrame<'a> {
         })
     }
 
-    pub fn output_f32(&mut self, index: usize) -> Option<&[f32]> {
+    pub fn output_f32(&self, index: usize) -> Option<&[f32]> {
         Some(unsafe {
             let data = self.output_data(index);
             std::slice::from_raw_parts(std::mem::transmute(data), self.nrow)

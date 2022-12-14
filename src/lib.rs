@@ -50,7 +50,7 @@ mod tests {
         let version = lib.version();
         println!("Library version: {version}");
 
-        let model = RawModel::load(&lib, "data/iris/pipeline.mojo", "")?;
+        let model = RawModel::load(&lib, "data/wine/pipeline.mojo", "")?;
         println!("Pipeline UUID: {}", model.uuid());
         println!("Time created: {}", model.time_created_utc());
         let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as RawFlags)?;
@@ -66,9 +66,16 @@ mod tests {
         pipeline.transform(&mut frame, 5, true).unwrap();
         log::trace!("ncol after predict: {}", frame.ncol());
         // present output columns
-        let q3 = &frame.output_f32(0/*"quality.3"*/).unwrap()[0..5];
-        let q3s = q3.iter().map(|s|s.to_string()).collect::<Vec<String>>().join(",");
-        println!("Result: q3={}", q3s);
+        let q3 = frame.output_f32(0/*"quality.3"*/).unwrap();
+        println!("quality.3={q3:?}");
+        println!("quality.4={:?}", frame.output_f32(1).unwrap());
+        println!("quality.5={:?}", frame.output_f32(2).unwrap());
+        println!("quality.6={:?}", frame.output_f32(3).unwrap());
+        println!("quality.7={:?}", frame.output_f32(4).unwrap());
+        let q8 = frame.output_f32(5).unwrap();
+        println!("quality.8={q8:?}", );
+        assert_eq!(q3, [0.004791974, 0.0038865132, 0.003860102, 0.0048087006, 0.0038697503]);
+        assert_eq!(q8, [0.03322292, 0.034191407, 0.03479463, 0.03333889, 0.04129037]);
         Ok(())
     }
 }
