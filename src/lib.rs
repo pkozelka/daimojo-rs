@@ -166,6 +166,8 @@ impl Drop for MojoFrame {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::CString;
+    use crate::daimojo_library::{MOJO_Transform_Flags, RawFlags, RawFrame, RawModel, RawPipeline};
     use crate::error;
     use super::DaiMojo;
 
@@ -177,22 +179,23 @@ mod tests {
         let daimojo = DaiMojo::library(LIBDAIMOJO_SO)?;
         let version = daimojo.version();
         println!("Library version: {version}");
-        let pipeline = daimojo.pipeline("data/iris/pipeline.mojo")?;
-        println!("Pipeline UUID: {}", pipeline.uuid());
-        println!("Time created: {}", pipeline.time_created());
-        let mut frame = pipeline.create_frame(1);
+        let model = RawModel::load(&daimojo.lib, &CString::new("data/iris/pipeline.mojo")?, &CString::new("")?)?;
+        println!("Pipeline UUID: {}", model.uuid());
+        println!("Time created: {}", model.time_created_utc());
+        let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as RawFlags)?;
+        let mut frame = RawFrame::new(&pipeline, 1)?;
         // fill input columns
-        frame.input_f32_mut("sepal_len").unwrap()[0] = 5.1;
-        frame.input_f32_mut("sepal_wid").unwrap()[0] = 3.5;
-        frame.input_f32_mut("petal_len").unwrap()[0] = 1.4;
-        frame.input_f32_mut("petal_wid").unwrap()[0] = 0.2;
+        frame.input_f32_mut(0, /*"sepal_len"*/).unwrap()[0] = 5.1;
+        frame.input_f32_mut(1, /*"sepal_wid"*/).unwrap()[0] = 3.5;
+        frame.input_f32_mut(2, /*"petal_len"*/).unwrap()[0] = 1.4;
+        frame.input_f32_mut(3, /*"petal_wid"*/).unwrap()[0] = 0.2;
         log::trace!("ncol before predict: {}", frame.ncol());
-        pipeline.predict(&mut frame, 1).unwrap();
+        pipeline.transform(&mut frame, 1, false).unwrap();
         log::trace!("ncol after predict: {}", frame.ncol());
         // present output columns
-        let setosa = frame.output_f32("class.Iris-setosa").unwrap()[0];
-        let versicolor = frame.output_f32("class.Iris-versicolor").unwrap()[0];
-        let virginica = frame.output_f32("class.Iris-virginica").unwrap()[0];
+        let setosa = frame.output_f32(0).unwrap()[0];
+        let versicolor = frame.output_f32(1).unwrap()[0];
+        let virginica = frame.output_f32(2).unwrap()[0];
         println!("Result: {} {} {}", setosa, versicolor, virginica);
         assert_eq!(setosa, 0.43090245);
         assert_eq!(versicolor, 0.28463825583457947);
@@ -210,12 +213,12 @@ mod tests {
         println!("Time created: {}", pipeline.time_created());
         let mut frame = pipeline.create_frame(5);
         // fill input columns
-        let fa = frame.input_f32_mut("fixed acidity").unwrap();
-        fa[0] = 11.8;
-        fa[1] = 7.2;
-        fa[2] = 6.4;
-        fa[3] = 8.6;
-        fa[4] = 7.3;
+        let fixed_acidity = frame.input_f32_mut("fixed acidity").unwrap();
+        fixed_acidity[0] = 11.8;
+        fixed_acidity[1] = 7.2;
+        fixed_acidity[2] = 6.4;
+        fixed_acidity[3] = 8.6;
+        fixed_acidity[4] = 7.3;
         log::trace!("ncol before predict: {}", frame.ncol());
         pipeline.predict(&mut frame, 5).unwrap();
         log::trace!("ncol after predict: {}", frame.ncol());

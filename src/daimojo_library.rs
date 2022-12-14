@@ -7,10 +7,9 @@ use std::ffi::CStr;
 use std::io::ErrorKind;
 use std::os::raw::c_char;
 use std::path::PathBuf;
-use chrono::{DateTime, NaiveDateTime, Utc};
 
-use dlopen2::wrapper::Container;
-use dlopen2::wrapper::WrapperApi;
+use chrono::{DateTime, NaiveDateTime, Utc};
+use dlopen2::wrapper::{Container, WrapperApi};
 
 use crate::error;
 
@@ -105,7 +104,7 @@ pub struct DaiMojoLibrary {
 
 impl DaiMojoLibrary {
 
-    pub fn open(libname: &str) -> crate::error::Result<Self> {
+    pub fn open(libname: &str) -> error::Result<Self> {
         let lib = PathBuf::from(libname).canonicalize()?;
         let libname = lib.to_str().expect(&format!("Not a valid unicode pathname: {libname}"));
         let version_api: Container<DaiMojoVersionBindings> = unsafe { Container::load(libname) }
@@ -134,76 +133,76 @@ impl DaiMojoLibrary {
         unsafe { self.api.MOJO_DeleteModel(pipeline) }
     }
 
-    pub fn uuid(&self, pipeline: *const MOJO_Model) -> &CStr {
+    pub fn uuid(&self, _pipeline: *const MOJO_Model) -> &CStr {
         unimplemented!()
     }
 
-    pub fn is_valid(&self, pipeline: *const MOJO_Model) -> bool {
+    pub fn is_valid(&self, _pipeline: *const MOJO_Model) -> bool {
         unimplemented!()
     }
 
-    pub fn time_created(&self, pipeline: *const MOJO_Model) -> u64 {
+    pub fn time_created(&self, _pipeline: *const MOJO_Model) -> u64 {
         unimplemented!()
     }
 
-    pub fn missing_values_num(&self, pipeline: *const MOJO_Model) -> usize {
+    pub fn missing_values_num(&self, _pipeline: *const MOJO_Model) -> usize {
         unimplemented!()
     }
 
-    pub fn missing_values(&self, pipeline: *const MOJO_Model) -> PCharArray {
+    pub fn missing_values(&self, _pipeline: *const MOJO_Model) -> PCharArray {
         unimplemented!()
     }
 
-    pub fn feature_num(&self, pipeline: *const MOJO_Model) -> usize {
+    pub fn feature_num(&self, _pipeline: *const MOJO_Model) -> usize {
         unimplemented!()
     }
 
-    pub fn feature_names(&self, pipeline: *const MOJO_Model) -> PCharArray {
+    pub fn feature_names(&self, _pipeline: *const MOJO_Model) -> PCharArray {
         unimplemented!()
     }
 
-    pub fn feature_types(&self, pipeline: *const MOJO_Model) -> *const MOJO_DataType {
+    pub fn feature_types(&self, _pipeline: *const MOJO_Model) -> *const MOJO_DataType {
         unimplemented!()
     }
 
-    pub fn output_num(&self, pipeline: *const MOJO_Model) -> usize {
+    pub fn output_num(&self, _pipeline: *const MOJO_Model) -> usize {
         unimplemented!()
     }
 
-    pub fn output_names(&self, pipeline: *const MOJO_Model) -> PCharArray {
+    pub fn output_names(&self, _pipeline: *const MOJO_Model) -> PCharArray {
         unimplemented!()
     }
 
-    pub fn output_types(&self, pipeline: *const MOJO_Model) -> *const MOJO_DataType {
+    pub fn output_types(&self, _pipeline: *const MOJO_Model) -> *const MOJO_DataType {
         unimplemented!()
     }
 
-    pub fn predict(&self, pipeline: *const MOJO_Model, frame: *const MOJO_Frame, nrow: usize) {
+    pub fn predict(&self, _pipeline: *const MOJO_Model, _frame: *const MOJO_Frame, _nrow: usize) {
         unimplemented!()
     }
 
-    pub fn new_frame(&self, pipeline: *const MOJO_Pipeline, nrow: usize) -> *const MOJO_Frame {
+    pub fn new_frame(&self, _pipeline: *const MOJO_Pipeline, _nrow: usize) -> *const MOJO_Frame {
         unimplemented!()
     }
 
-    pub fn delete_frame(&self, frame: *const MOJO_Frame) {
+    pub fn delete_frame(&self, _frame: *const MOJO_Frame) {
         unimplemented!()
     }
 
-    pub fn frame_get_row_count(&self, frame: *const MOJO_Frame) -> usize {
+    pub fn frame_get_row_count(&self, _frame: *const MOJO_Frame) -> usize {
         unimplemented!()
     }
 
-    pub fn frame_ncol(&self, frame: *const MOJO_Frame) -> usize {
+    pub fn frame_ncol(&self, _frame: *const MOJO_Frame) -> usize {
         unimplemented!()
     }
 
-    pub fn column_buffer(&self, frame: *const MOJO_Frame, colname: *const c_char) -> *mut u8 {
+    pub fn column_buffer(&self, _frame: *const MOJO_Frame, _colname: *const c_char) -> *mut u8 {
         unimplemented!()
     }
 }
 
-type RawFlags = u64;
+pub type RawFlags = u32;
 
 pub struct RawColumnMeta<'a> {
     pub name: Cow<'a, str>,
@@ -299,6 +298,13 @@ impl<'a> RawPipeline<'a> {
             columns
         }
     }
+
+    pub fn transform(&self, frame: &RawFrame, nrow: usize, debug: bool) -> error::Result<()> {
+        unsafe {
+            self.lib.api.MOJO_Transform(self.pipeline_ptr, frame.frame_ptr, nrow, debug);
+        }
+        Ok(())
+    }
 }
 
 impl<'a> Drop for RawPipeline<'a> {
@@ -310,6 +316,7 @@ impl<'a> Drop for RawPipeline<'a> {
 pub struct RawFrame<'a> {
     lib: &'a DaiMojoLibrary,
     frame_ptr: *const MOJO_Frame,
+    nrow: usize,
     pipeline_ptr: *const MOJO_Pipeline,
 }
 
@@ -320,6 +327,7 @@ impl<'a> RawFrame<'a> {
         Ok(Self {
             lib: pipeline.lib,
             frame_ptr,
+            nrow,
             pipeline_ptr,
         })
     }
@@ -338,6 +346,20 @@ impl<'a> RawFrame<'a> {
         unsafe {
             self.lib.api.MOJO_Output_Data(self.pipeline_ptr, self.frame_ptr, index)
         }
+    }
+
+    pub fn input_f32_mut(&mut self, index: usize) -> Option<&mut [f32]> {
+        Some(unsafe {
+            let data = self.input_data(index);
+            std::slice::from_raw_parts_mut(std::mem::transmute(data), self.nrow)
+        })
+    }
+
+    pub fn output_f32(&mut self, index: usize) -> Option<&[f32]> {
+        Some(unsafe {
+            let data = self.output_data(index);
+            std::slice::from_raw_parts(std::mem::transmute(data), self.nrow)
+        })
     }
 }
 
@@ -402,6 +424,7 @@ impl PCharArrayOperations for PCharArray {
 mod tests {
     use std::ffi::CString;
     use std::path::PathBuf;
+
     use crate::daimojo_library::{MOJO_Transform_Flags, RawFlags, RawPipeline};
 
     use super::{DaiMojoLibrary, RawModel};
