@@ -18,7 +18,7 @@ pub struct DaiMojo {
 
 impl DaiMojo {
     pub fn library(libname: &str) -> Result<Self> {
-        let lib = DaiMojoLibrary::open(Path::new(libname))?;
+        let lib = DaiMojoLibrary::load(Path::new(libname))?;
         Ok(Self {lib: Rc::new(lib)})
     }
 
@@ -170,14 +170,13 @@ mod tests {
     use std::path::Path;
     use crate::daimojo_library::{DaiMojoLibrary, MOJO_Transform_Flags, RawFlags, RawFrame, RawModel, RawPipeline};
     use crate::error;
-    use super::DaiMojo;
 
     // const LIBDAIMOJO_SO: &str = "lib/linux_x64/libdaimojo.so";
     const LIBDAIMOJO_SO: &str = "libdaimojo.so";
 
     #[test]
     fn simple_iris_test() -> error::Result<()>{
-        let lib = DaiMojoLibrary::open(Path::new(LIBDAIMOJO_SO))?;
+        let lib = DaiMojoLibrary::load(Path::new(LIBDAIMOJO_SO))?;
         let version = lib.version();
         println!("Library version: {version}");
         let model = RawModel::load(&lib, "data/iris/pipeline.mojo", "")?;
@@ -206,25 +205,27 @@ mod tests {
 
     #[test]
     fn simple_wine_test() -> error::Result<()> {
-        let lib = DaiMojo::library(LIBDAIMOJO_SO)?;
+        let lib = DaiMojoLibrary::load(LIBDAIMOJO_SO)?;
         let version = lib.version();
         println!("Library version: {version}");
-        let model = lib.pipeline("data/iris/pipeline.mojo")?;
+
+        let model = RawModel::load(&lib, "data/iris/pipeline.mojo", "")?;
         println!("Pipeline UUID: {}", model.uuid());
-        println!("Time created: {}", model.time_created());
-        let mut frame = model.create_frame(5);
+        println!("Time created: {}", model.time_created_utc());
+        let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as RawFlags)?;
+        let mut frame = RawFrame::new(&pipeline, 5)?;
         // fill input columns
-        let fixed_acidity = frame.input_f32_mut("fixed acidity").unwrap();
+        let fixed_acidity = frame.input_f32_mut(0/*"fixed acidity"*/).unwrap();
         fixed_acidity[0] = 11.8;
         fixed_acidity[1] = 7.2;
         fixed_acidity[2] = 6.4;
         fixed_acidity[3] = 8.6;
         fixed_acidity[4] = 7.3;
         log::trace!("ncol before predict: {}", frame.ncol());
-        model.predict(&mut frame, 5).unwrap();
+        pipeline.transform(&mut frame, 5, true).unwrap();
         log::trace!("ncol after predict: {}", frame.ncol());
         // present output columns
-        let q3 = &frame.output_f32("quality.3").unwrap()[0..5];
+        let q3 = &frame.output_f32(0/*"quality.3"*/).unwrap()[0..5];
         let q3s = q3.iter().map(|s|s.to_string()).collect::<Vec<String>>().join(",");
         println!("Result: q3={}", q3s);
         Ok(())

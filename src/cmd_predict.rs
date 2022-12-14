@@ -2,8 +2,7 @@ use std::collections::HashMap;
 use std::io::{ErrorKind, Stdout};
 use std::mem::transmute;
 use csv::Writer;
-use daimojo::daimojo_library::MOJO_DataType;
-use daimojo::{MojoFrame, MojoPipeline};
+use daimojo::daimojo_library::{MOJO_DataType, RawFrame, RawPipeline};
 
 const MOJO_I32_NAN: i32 = i32::MAX;
 const MOJO_I64_NAN: i64 = i64::MAX;
@@ -20,10 +19,10 @@ const MOJO_I64_NAN: i64 = i64::MAX;
 /// Minimum size returned by [batch_size_magic].
 const MIN_BATCH_SIZE: usize = 1000;
 
-pub fn cmd_predict(pipeline: &MojoPipeline, _output: Option<String>, input: Option<String>, batch_size: usize) -> anyhow::Result<u8> {
+pub fn cmd_predict(pipeline: &RawPipeline, _output: Option<String>, input: Option<String>, batch_size: usize) -> anyhow::Result<u8> {
     let batch_size = batch_size_magic(&input, batch_size)?;
 
-    let mut frame = pipeline.create_frame(batch_size);
+    let mut frame = RawFrame::new(pipeline, batch_size)?;
 
     let mut rdr = csv::Reader::from_path(input.unwrap())?;
     let mut importer = FrameImporter::init(&pipeline, &mut frame, &mut rdr)?;
@@ -34,7 +33,7 @@ pub fn cmd_predict(pipeline: &MojoPipeline, _output: Option<String>, input: Opti
         let rows = importer.import_frame(&mut rdr_iter)?;
 
         // predict
-        pipeline.predict(&mut frame, rows)?;
+        pipeline.transform(&mut frame, rows, false)?;
         log::debug!("-- batch {rows} rows");
 
         // output csv
@@ -52,7 +51,8 @@ struct FrameImporter {
 }
 
 impl FrameImporter {
-    pub fn init(pipeline: &MojoPipeline, frame: &mut MojoFrame, rdr: &mut csv::Reader<std::fs::File>) -> std::io::Result<Self> {
+    pub fn init(pipeline: &RawPipeline, frame: &mut RawFrame, rdr: &mut csv::Reader<std::fs::File>) -> std::io::Result<Self> {
+        let model = pipeline.model;
         let csv_headers = match rdr.headers() {
             Err(e) => return Err(std::io::Error::new(ErrorKind::InvalidData, format!("Cannot read header: {e}"))),
             Ok(headers) => headers,
@@ -61,15 +61,15 @@ impl FrameImporter {
             .map(|(csv_index, col_name)| (col_name, csv_index))
             .collect::<HashMap<&str, usize>>();
         let mut icols = Vec::new();
-        for (col_name, data_type) in pipeline.inputs() {
-            if let Some(&csv_index) = csv_headers.get(col_name.as_str()) {
-                let ptr = frame.input_mut(&col_name).expect(&format!("No buffer for input column '{col_name}'"));
-                icols.push((ColumnData { data_type, array_start: ptr, current: ptr }, csv_index))
+        for (index, col) in model.features().iter().enumerate() {
+            if let Some(&csv_index) = csv_headers.get(col.name.as_ref()) {
+                let ptr = unsafe { frame.input_data(index) }; //.expect(&format!("No buffer for input column '{}'", col.name));
+                icols.push((ColumnData { data_type: col.column_type, array_start: ptr, current: ptr }, csv_index))
             }
         }
         Ok(Self {
             icols,
-            batch_size: frame.nrow(),
+            batch_size: frame.nrow,
             eof: rdr.is_done()
         })
     }
@@ -106,13 +106,13 @@ struct FrameExporter {
 }
 
 impl FrameExporter {
-    fn init(pipeline: &MojoPipeline, frame: &MojoFrame) -> std::io::Result<Self> {
+    fn init(pipeline: &RawPipeline, frame: &RawFrame) -> std::io::Result<Self> {
         let mut wtr = csv::Writer::from_writer(std::io::stdout());
         let mut ocols = Vec::new();
-        for (col_name, data_type) in pipeline.outputs() {
-            wtr.write_field(&col_name)?;
-            let ptr = frame.output(&col_name).expect(&format!("No buffer for output column '{col_name}'"));
-            ocols.push(ColumnData { data_type, array_start: ptr, current: ptr as *mut u8 });
+        for (index, col) in pipeline.outputs().iter().enumerate() {
+            wtr.write_field(&col.name.as_ref())?;
+            let ptr = unsafe { frame.output_data(index) }; //.expect(&format!("No buffer for output column '{}'", col.name));
+            ocols.push(ColumnData { data_type: col.column_type, array_start: ptr, current: ptr as *mut u8 });
         }
         wtr.write_record(None::<&[u8]>)?;
         wtr.flush()?;

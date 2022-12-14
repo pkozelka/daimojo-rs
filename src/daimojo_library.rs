@@ -104,7 +104,7 @@ pub struct DaiMojoLibrary {
 
 impl DaiMojoLibrary {
 
-    pub fn open<P: AsRef<Path>>(libfile: P) -> error::Result<Self> {
+    pub fn load<P: AsRef<Path>>(libfile: P) -> error::Result<Self> {
         let libfile = libfile.as_ref().canonicalize()?;
         let libfile = libfile.to_str().expect(&format!("Not a valid unicode pathname: {}", libfile.to_string_lossy()));
         let version_api: Container<DaiMojoVersionBindings> = unsafe { Container::load(libfile) }
@@ -279,6 +279,7 @@ impl <'a> Drop for RawModel<'a> {
 pub struct RawPipeline<'a> {
     lib: &'a DaiMojoLibrary,
     pipeline_ptr: *const MOJO_Pipeline,
+    pub model: &'a RawModel<'a>,
 }
 
 impl<'a> RawPipeline<'a> {
@@ -287,6 +288,7 @@ impl<'a> RawPipeline<'a> {
         Ok(Self {
             lib: model.lib,
             pipeline_ptr,
+            model,
         })
     }
 
@@ -321,7 +323,7 @@ impl<'a> Drop for RawPipeline<'a> {
 pub struct RawFrame<'a> {
     lib: &'a DaiMojoLibrary,
     frame_ptr: *const MOJO_Frame,
-    nrow: usize,
+    pub nrow: usize,
     pipeline_ptr: *const MOJO_Pipeline,
 }
 
@@ -438,7 +440,7 @@ mod tests {
 
     #[test]
     fn iris() {
-        let lib = DaiMojoLibrary::open(Path::new(LIBDAIMOJO_SO)).unwrap();
+        let lib = DaiMojoLibrary::load(Path::new(LIBDAIMOJO_SO)).unwrap();
         let version = lib.version();
         println!("version: {version}");
 

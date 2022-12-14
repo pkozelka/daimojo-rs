@@ -12,3 +12,8 @@ target/libdemo.so:
 to-rust:
 	sed -n --file=to-rust.sed lib/linux_x64/c_api.h > target/capi.txt
 
+test-wine:
+	cargo run -- --mojo data/wine/pipeline.mojo predict data/wine/wine_test.csv
+
+info-wine:
+	cargo run -- --mojo data/wine/pipeline.mojo show

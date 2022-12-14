@@ -1,11 +1,9 @@
 extern crate core;
 
-use std::path::PathBuf;
 use std::process::ExitCode;
-use std::str::FromStr;
 use clap::{ArgAction, Parser, Subcommand};
 use log::LevelFilter;
-use daimojo::MojoPipeline;
+use daimojo::daimojo_library::{DaiMojoLibrary, MOJO_Transform_Flags, RawColumnMeta, RawFlags, RawModel, RawPipeline};
 
 /// CLI for daimojo libraries
 #[derive(Parser)]
@@ -66,11 +64,6 @@ fn main() -> ExitCode {
 fn run() -> anyhow::Result<u8> {
     let cli = Cli::parse();
 
-    // library path must always contain a directory so we canonicalize it - it's the easiest way to get its absolute path
-    let lib = PathBuf::from_str(&cli.lib).unwrap()
-        .canonicalize()?
-        .to_string_lossy()
-        .to_string();
     // setup logger
     let level: i8 = 3 as i8 + cli.verbose as i8 - cli.silent as i8;
     let level = match level {
@@ -88,40 +81,48 @@ fn run() -> anyhow::Result<u8> {
     // run subcommand
     match cli.command {
         Commands::Show => {
+            let lib = load_library(&cli.lib)?;
             return Ok(show_pipeline(&lib, &cli.mojo)?)
         }
         Commands::Predict {output, input, batch_size} => {
-            let pipeline = open_pipeline(&cli.lib, &cli.mojo)?;
+            let lib = load_library(&cli.lib)?;
+            let model = load_model(&lib, &cli.mojo)?;
+            let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as RawFlags)?;
             Ok(cmd_predict::cmd_predict(&pipeline, output, input, batch_size)?)
         }
     }
 }
 
-fn show_pipeline(lib: &str, mojo: &str) -> anyhow::Result<u8> {
-    let pipeline = open_pipeline(lib, mojo)?;
-    println!("* UUID: {}", pipeline.uuid());
-    println!("* Time created: {}", pipeline.time_created());
-    println!("* Missing values: {}", pipeline.missing_values().join(", "));
-    let inputs = pipeline.inputs();
-    println!("Input features[{}]:", inputs.len());
-    for (col_name, col_type) in inputs {
-        println!("* '{col_name}': {col_type:?}");
+fn show_pipeline(lib: &DaiMojoLibrary, mojo: &str) -> anyhow::Result<u8> {
+    let model = load_model(lib, mojo)?;
+    println!("* UUID: {}", model.uuid());
+    println!("* Time created: {}", model.time_created_utc());
+    println!("* Missing values: {}", model.missing_values().join(", "));
+    let features = model.features();
+    println!("Input features[{}]:", features.len());
+    for RawColumnMeta { name, column_type} in features {
+        println!("* '{name}': {column_type:?}");
     }
+    let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as RawFlags)?; //TODO
     let outputs = pipeline.outputs();
     println!("Output columns[{}]:", outputs.len());
-    for (col_name, col_type) in outputs {
-        println!("* '{col_name}': {col_type:?}");
+    for RawColumnMeta { name, column_type} in outputs {
+        println!("* '{name}': {column_type:?}");
     }
     Ok(0)
 }
 
-fn open_pipeline(lib: &str, mojo: &str) -> daimojo::Result<MojoPipeline> {
-    log::debug!("Opening library: '{lib}'");
-    let lib = daimojo::DaiMojo::library(lib)?;
+fn load_library(lib: &str) -> daimojo::Result<DaiMojoLibrary> {
+    log::debug!("Loading library: '{lib}'");
+    let lib = DaiMojoLibrary::load(lib)?;
     println!("Library's daimojo version is {}", lib.version());
-    log::debug!("Opening pipeline: '{mojo}'");
-    let pipeline = lib.pipeline(mojo)?;
-    Ok(pipeline)
+    Ok(lib)
+}
+
+fn load_model<'a>(lib: &'a DaiMojoLibrary, mojo: &str) -> daimojo::Result<RawModel<'a>> {
+    log::debug!("Loading mojo: '{mojo}'");
+    let model = RawModel::load(&lib, mojo, ".")?;
+    Ok(model)
 }
 
 mod cmd_predict;
