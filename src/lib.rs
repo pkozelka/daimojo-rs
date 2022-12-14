@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
+use std::path::Path;
 use std::rc::Rc;
 use crate::daimojo_library::{DaiMojoLibrary, MOJO_DataType, MOJO_Frame, MOJO_Model, PArrayOperations, PCharArrayOperations};
 
@@ -17,7 +18,7 @@ pub struct DaiMojo {
 
 impl DaiMojo {
     pub fn library(libname: &str) -> Result<Self> {
-        let lib = DaiMojoLibrary::open(libname)?;
+        let lib = DaiMojoLibrary::open(Path::new(libname))?;
         Ok(Self {lib: Rc::new(lib)})
     }
 
@@ -74,13 +75,13 @@ impl MojoPipeline {
         unimplemented!()
     }
 
-    pub fn predict(&self, frame: &mut MojoFrame, nrow: usize) -> error::Result<usize> {
+    pub fn predict(&self, frame: &mut MojoFrame, nrow: usize) -> Result<usize> {
         if self.lib.is_valid(self.mojo_model) {
             self.lib.predict(self.mojo_model, frame.mojo_frame, nrow);
             // TODO return effective count
             Ok(nrow)
         } else {
-            Err(error::MojoError::InvalidPipeline)
+            Err(MojoError::InvalidPipeline)
         }
     }
 
@@ -166,8 +167,8 @@ impl Drop for MojoFrame {
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::CString;
-    use crate::daimojo_library::{MOJO_Transform_Flags, RawFlags, RawFrame, RawModel, RawPipeline};
+    use std::path::Path;
+    use crate::daimojo_library::{DaiMojoLibrary, MOJO_Transform_Flags, RawFlags, RawFrame, RawModel, RawPipeline};
     use crate::error;
     use super::DaiMojo;
 
@@ -176,10 +177,10 @@ mod tests {
 
     #[test]
     fn simple_iris_test() -> error::Result<()>{
-        let daimojo = DaiMojo::library(LIBDAIMOJO_SO)?;
-        let version = daimojo.version();
+        let lib = DaiMojoLibrary::open(Path::new(LIBDAIMOJO_SO))?;
+        let version = lib.version();
         println!("Library version: {version}");
-        let model = RawModel::load(&daimojo.lib, &CString::new("data/iris/pipeline.mojo")?, &CString::new("")?)?;
+        let model = RawModel::load(&lib, "data/iris/pipeline.mojo", "")?;
         println!("Pipeline UUID: {}", model.uuid());
         println!("Time created: {}", model.time_created_utc());
         let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as RawFlags)?;
@@ -205,13 +206,13 @@ mod tests {
 
     #[test]
     fn simple_wine_test() -> error::Result<()> {
-        let daimojo = DaiMojo::library(LIBDAIMOJO_SO)?;
-        let version = daimojo.version();
+        let lib = DaiMojo::library(LIBDAIMOJO_SO)?;
+        let version = lib.version();
         println!("Library version: {version}");
-        let pipeline = daimojo.pipeline("data/iris/pipeline.mojo")?;
-        println!("Pipeline UUID: {}", pipeline.uuid());
-        println!("Time created: {}", pipeline.time_created());
-        let mut frame = pipeline.create_frame(5);
+        let model = lib.pipeline("data/iris/pipeline.mojo")?;
+        println!("Pipeline UUID: {}", model.uuid());
+        println!("Time created: {}", model.time_created());
+        let mut frame = model.create_frame(5);
         // fill input columns
         let fixed_acidity = frame.input_f32_mut("fixed acidity").unwrap();
         fixed_acidity[0] = 11.8;
@@ -220,7 +221,7 @@ mod tests {
         fixed_acidity[3] = 8.6;
         fixed_acidity[4] = 7.3;
         log::trace!("ncol before predict: {}", frame.ncol());
-        pipeline.predict(&mut frame, 5).unwrap();
+        model.predict(&mut frame, 5).unwrap();
         log::trace!("ncol after predict: {}", frame.ncol());
         // present output columns
         let q3 = &frame.output_f32("quality.3").unwrap()[0..5];

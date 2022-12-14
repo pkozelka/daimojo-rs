@@ -3,10 +3,10 @@
 #![allow(non_snake_case)]
 
 use std::borrow::Cow;
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use std::io::ErrorKind;
 use std::os::raw::c_char;
-use std::path::PathBuf;
+use std::path::Path;
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 use dlopen2::wrapper::{Container, WrapperApi};
@@ -104,18 +104,19 @@ pub struct DaiMojoLibrary {
 
 impl DaiMojoLibrary {
 
-    pub fn open(libname: &str) -> error::Result<Self> {
-        let lib = PathBuf::from(libname).canonicalize()?;
-        let libname = lib.to_str().expect(&format!("Not a valid unicode pathname: {libname}"));
-        let version_api: Container<DaiMojoVersionBindings> = unsafe { Container::load(libname) }
-            .map_err(|e| std::io::Error::new(ErrorKind::InvalidInput, format!("{libname}: {e:?}")))?;
+    pub fn open<P: AsRef<Path>>(libfile: P) -> error::Result<Self> {
+        let libfile = libfile.as_ref().canonicalize()?;
+        let libfile = libfile.to_str().expect(&format!("Not a valid unicode pathname: {}", libfile.to_string_lossy()));
+        let version_api: Container<DaiMojoVersionBindings> = unsafe { Container::load(libfile) }
+            .map_err(|e| std::io::Error::new(ErrorKind::InvalidInput, format!("{libfile}: {e:?}")))?;
         let version = unsafe { CStr::from_ptr(version_api.mojo_version()) }.to_string_lossy();
+        log::debug!("Version: {version}");
 
         if !version.starts_with("2.") {
-            return Err(error::MojoError::UnsupportedApi(libname.to_string(), version.to_string()));
+            return Err(error::MojoError::UnsupportedApi(libfile.to_string(), version.to_string()));
         }
-        let container = unsafe { Container::load(libname) };
-        log::debug!("Version: {version}");
+        // TODO: isn't there a way to avoid loading again?
+        let container = unsafe { Container::load(libfile) };
         let api = container?;
         Ok(Self { api, version: version.to_string()})
     }
@@ -215,7 +216,11 @@ pub struct RawModel<'a> {
 }
 
 impl<'a> RawModel<'a> {
-    pub fn load(lib: &'a DaiMojoLibrary, filename: &CStr, tf_lib_prefix: &CStr) -> std::io::Result<Self> {
+    pub fn load<P: AsRef<Path>>(lib: &'a DaiMojoLibrary, filename: P, tf_lib_prefix: &str) -> std::io::Result<Self> {
+        let filename = filename.as_ref().canonicalize()?;
+        let filename = filename.to_str().expect(&format!("Not a valid unicode pathname: {}", filename.to_string_lossy()));
+        let filename = CString::new(filename)?;
+        let tf_lib_prefix = CString::new(tf_lib_prefix)?;
         let model_ptr = unsafe {
             lib.api.MOJO_NewModel(filename.as_ptr(), tf_lib_prefix.as_ptr())
         };
@@ -422,8 +427,7 @@ impl PCharArrayOperations for PCharArray {
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::CString;
-    use std::path::PathBuf;
+    use std::path::Path;
 
     use crate::daimojo_library::{MOJO_Transform_Flags, RawFlags, RawPipeline};
 
@@ -434,13 +438,11 @@ mod tests {
 
     #[test]
     fn iris() {
-        let lib = DaiMojoLibrary::open(LIBDAIMOJO_SO).unwrap();
+        let lib = DaiMojoLibrary::open(Path::new(LIBDAIMOJO_SO)).unwrap();
         let version = lib.version();
         println!("version: {version}");
 
-        let filename = PathBuf::from("../mojo2/data/iris/pipeline.mojo");
-        let filename = CString::new(filename.to_string_lossy().as_ref()).unwrap();
-        let model = RawModel::load(&lib, filename.as_ref(), CString::new("").unwrap().as_ref()).unwrap();
+        let model = RawModel::load(&lib, "../mojo2/data/iris/pipeline.mojo", ".").unwrap();
 
         println!("UUID: {}", model.uuid());
         println!("IsValid: {}", model.is_valid());
