@@ -64,6 +64,7 @@ impl FrameImporter {
         for (index, col) in model.features().iter().enumerate() {
             if let Some(&csv_index) = csv_headers.get(col.name.as_ref()) {
                 let ptr = unsafe { frame.input_data(index) }; //.expect(&format!("No buffer for input column '{}'", col.name));
+                // println!("Rust: input_data({index}='{}') -> {:X}", col.name, ptr as usize);
                 icols.push((ColumnData { data_type: col.column_type, array_start: ptr, current: ptr }, csv_index))
             }
         }
@@ -112,6 +113,7 @@ impl FrameExporter {
         for (index, col) in pipeline.outputs().iter().enumerate() {
             wtr.write_field(&col.name.as_ref())?;
             let ptr = unsafe { frame.output_data(index) }; //.expect(&format!("No buffer for output column '{}'", col.name));
+            // println!("Rust: output_data({index}='{}') -> {:X}", col.name, ptr as usize);
             ocols.push(ColumnData { data_type: col.column_type, array_start: ptr, current: ptr as *mut u8 });
         }
         wtr.write_record(None::<&[u8]>)?;
@@ -171,6 +173,10 @@ impl ColumnData  {
     fn item_from_str(&mut self, value: &str) {
         log::trace!("memset:{:?}:[@0x{:x}] = '{value}'",self.data_type, self.current as usize);
         match self.data_type {
+            MOJO_DataType::MOJO_BOOL => {
+                let value = mojo2_parse_bool(value);
+                unchecked_write_next(&mut self.current, value);
+            }
             MOJO_DataType::MOJO_FLOAT => {
                 let value = value.parse::<f32>().unwrap_or(f32::NAN);
                 unchecked_write_next(&mut self.current, value);
@@ -196,6 +202,10 @@ impl ColumnData  {
 
     fn item_to_string(&mut self) -> String {
         match self.data_type {
+            MOJO_DataType::MOJO_BOOL => {
+                let value = unchecked_read_next::<bool>(&mut self.current);
+                format!("{value}")
+            }
             MOJO_DataType::MOJO_FLOAT => {
                 let value = unchecked_read_next::<f32>(&mut self.current);
                 format!("{value}")
@@ -212,10 +222,29 @@ impl ColumnData  {
                 let value = unchecked_read_next::<i64>(&mut self.current);
                 format!("{value}")
             }
-            //TODO!
-            _ => panic!("unsupported column type")
+            MOJO_DataType::MOJO_STRING => {
+                todo!()
+            }
+            MOJO_DataType::MOJO_UNKNOWN => panic!("unsupported column type")
         }
     }
+}
+
+fn mojo2_parse_bool(s: &str) -> bool {
+    const VALUES: &[&str] = &[
+        "true", "True", "TRUE", "1", "1.0",
+        "false", "False", "FALSE", "0", "0.0"];
+    let mut result = true;
+    for &item in VALUES {
+        if item == "false" {
+            result = false;
+        }
+        if item == s {
+            return result;
+        }
+    }
+    log::trace!("Invalid bool value: '{s}'");
+    false
 }
 
 /// Heuristics to estimate best batch size possible for given input.

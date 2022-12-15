@@ -48,11 +48,18 @@ pub type PCharArray = *const *const c_char;
 #[repr(C)]
 #[derive(Copy,Clone,Debug)]
 pub enum MOJO_DataType {
-    MOJO_UNKNOWN = 1,
-    MOJO_FLOAT = 2,
-    MOJO_DOUBLE = 3,
-    MOJO_INT32 = 4,
-    MOJO_INT64 = 5,
+    MOJO_UNKNOWN = 0,
+    /// [i8] byte-represented boolean, 0=false, 1=true, NA is not defined
+    MOJO_BOOL = 1,
+    /// [i32] 4 bytes signed integer
+    MOJO_INT32 = 2,
+    /// [i64] 8 bytes signed integer
+    MOJO_INT64 = 3,
+    /// [f32] 4 bytes floating point
+    MOJO_FLOAT = 4,
+    /// [f64] 8 bytes floating point
+    MOJO_DOUBLE = 5,
+    /// c++ std::string, NA=empty string
     MOJO_STRING = 6,
 }
 
