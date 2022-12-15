@@ -137,24 +137,6 @@ impl FrameExporter {
     }
 }
 
-/// Read value from array at provided pointer, and move the pointer to the next item
-fn unchecked_read_next<T: Copy>(ptr: &mut *mut/*const*/ u8) -> T {
-    unsafe {
-        let p: *const T = transmute(*ptr as usize);
-        *ptr = p.offset(1) as *mut/*const*/ u8;
-        p.read()
-    }
-}
-
-/// Write value to array at provided pointer, and move the pointer to the next item
-fn unchecked_write_next<T: Copy>(ptr: &mut *mut u8, value: T) {
-    unsafe {
-        let p: *mut T = transmute(*ptr as usize);
-        *ptr = p.offset(1) as *mut u8;
-        p.write(value)
-    }
-}
-
 struct ColumnData {
     data_type: MOJO_DataType,
     array_start: *const u8,
@@ -170,28 +152,37 @@ impl ColumnData  {
         vec.iter_mut().for_each(|(col,_)| col.current = col.array_start as *mut u8);
     }
 
+    /// Write value to array at provided pointer, and move the pointer to the next item
+    fn unchecked_write_next<T: Copy>(&mut self, value: T) {
+        unsafe {
+            let p: *mut T = transmute(self.current as usize);
+            self.current = p.offset(1) as *mut u8;
+            p.write(value)
+        }
+    }
+
     fn item_from_str(&mut self, value: &str) {
         log::trace!("memset:{:?}:[@0x{:x}] = '{value}'",self.data_type, self.current as usize);
         match self.data_type {
             MOJO_DataType::MOJO_BOOL => {
                 let value = mojo2_parse_bool(value);
-                unchecked_write_next(&mut self.current, value);
+                self.unchecked_write_next(value);
             }
             MOJO_DataType::MOJO_FLOAT => {
                 let value = value.parse::<f32>().unwrap_or(f32::NAN);
-                unchecked_write_next(&mut self.current, value);
+                self.unchecked_write_next(value);
             }
             MOJO_DataType::MOJO_DOUBLE => {
                 let value = value.parse::<f64>().unwrap_or(f64::NAN);
-                unchecked_write_next(&mut self.current, value);
+                self.unchecked_write_next(value);
             }
             MOJO_DataType::MOJO_INT32 => {
                 let value = value.parse::<i32>().unwrap_or(MOJO_I32_NAN);
-                unchecked_write_next(&mut self.current, value);
+                self.unchecked_write_next(value);
             }
             MOJO_DataType::MOJO_INT64 => {
                 let value = value.parse::<i64>().unwrap_or(MOJO_I64_NAN);
-                unchecked_write_next(&mut self.current, value);
+                self.unchecked_write_next(value);
             }
             MOJO_DataType::MOJO_STRING => {
                 // MOJO_Column_Write_Str(self.array_start, index, value.as_ptr());
@@ -201,26 +192,35 @@ impl ColumnData  {
         }
     }
 
+    /// Read value from array at provided pointer, and move the pointer to the next item
+    fn unchecked_read_next<T: Copy>(&mut self) -> T {
+        unsafe {
+            let p: *const T = transmute(self.current as usize);
+            self.current = p.offset(1) as *mut u8;
+            p.read()
+        }
+    }
+
     fn item_to_string(&mut self) -> String {
         match self.data_type {
             MOJO_DataType::MOJO_BOOL => {
-                let value = unchecked_read_next::<bool>(&mut self.current);
+                let value = self.unchecked_read_next::<bool>();
                 format!("{value}")
             }
             MOJO_DataType::MOJO_FLOAT => {
-                let value = unchecked_read_next::<f32>(&mut self.current);
+                let value = self.unchecked_read_next::<f32>();
                 format!("{value}")
             }
             MOJO_DataType::MOJO_DOUBLE => {
-                let value = unchecked_read_next::<f64>(&mut self.current);
+                let value = self.unchecked_read_next::<f64>();
                 format!("{value}")
             }
             MOJO_DataType::MOJO_INT32 => {
-                let value = unchecked_read_next::<i32>(&mut self.current);
+                let value = self.unchecked_read_next::<i32>();
                 format!("{value}")
             }
             MOJO_DataType::MOJO_INT64 => {
-                let value = unchecked_read_next::<i64>(&mut self.current);
+                let value = self.unchecked_read_next::<i64>();
                 format!("{value}")
             }
             MOJO_DataType::MOJO_STRING => {
