@@ -194,6 +194,7 @@ impl ColumnData  {
                 unchecked_write_next(&mut self.current, value);
             }
             MOJO_DataType::MOJO_STRING => {
+                // MOJO_Column_Write_Str(self.array_start, index, value.as_ptr());
                 todo!()
             }
             MOJO_DataType::MOJO_UNKNOWN => panic!("unsupported column type")
@@ -223,6 +224,7 @@ impl ColumnData  {
                 format!("{value}")
             }
             MOJO_DataType::MOJO_STRING => {
+                // let value = MOJO_Column_Read_Str(self.array_start, index));
                 todo!()
             }
             MOJO_DataType::MOJO_UNKNOWN => panic!("unsupported column type")

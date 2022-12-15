@@ -102,6 +102,9 @@ pub struct DaiMojoBindings {
     MOJO_FrameNcol: unsafe extern "C" fn(frame: *const MOJO_Frame) -> usize,
     MOJO_Input_Data: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, frame: *const MOJO_Frame, index: usize) -> *mut u8,
     MOJO_Output_Data: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, frame: *const MOJO_Frame, index: usize) -> *const u8,
+    // String values support
+    MOJO_Column_Write_Str: unsafe extern "C" fn(buffer: *mut u8, index: usize, value: *const c_char),
+    MOJO_Column_Read_Str: unsafe extern "C" fn(buffer: *const u8, index: usize) -> *const c_char,
 }
 
 pub struct DaiMojoLibrary {

@@ -17,3 +17,6 @@ test-wine:
 
 info-wine:
 	cargo run -- --mojo data/wine/pipeline.mojo show
+
+test-str:
+	cargo run -- --mojo data/fillna_str/pipeline.mojo predict data/fillna_str/example.csv
