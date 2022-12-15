@@ -3,7 +3,7 @@ extern crate core;
 use std::process::ExitCode;
 use clap::{ArgAction, Parser, Subcommand};
 use log::LevelFilter;
-use daimojo::daimojo_library::{DaiMojoLibrary, MOJO_Transform_Flags, RawColumnMeta, RawFlags, RawModel, RawPipeline};
+use daimojo::daimojo_library::{DaiMojoLibrary, MOJO_Transform_Flags, RawColumnMeta, MOJO_Transform_Flags_Type, RawModel, RawPipeline};
 
 /// CLI for daimojo libraries
 #[derive(Parser)]
@@ -87,7 +87,7 @@ fn run() -> anyhow::Result<u8> {
         Commands::Predict {output, input, batch_size} => {
             let lib = load_library(&cli.lib)?;
             let model = load_model(&lib, &cli.mojo)?;
-            let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as RawFlags)?;
+            let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as MOJO_Transform_Flags_Type)?;
             Ok(cmd_predict::cmd_predict(&pipeline, output, input, batch_size)?)
         }
     }
@@ -103,7 +103,7 @@ fn show_pipeline(lib: &DaiMojoLibrary, mojo: &str) -> anyhow::Result<u8> {
     for RawColumnMeta { name, column_type} in features {
         println!("* '{name}': {column_type:?}");
     }
-    let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as RawFlags)?; //TODO
+    let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as MOJO_Transform_Flags_Type)?; //TODO
     let outputs = pipeline.outputs();
     println!("Output columns[{}]:", outputs.len());
     for RawColumnMeta { name, column_type} in outputs {

@@ -16,6 +16,7 @@ use crate::error;
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct MOJO_Model {
+    // capabilities: MOJO_Transform_Flags_Type,
     is_valid: bool,
     uuid: *const c_char,
     time_created: u64,
@@ -30,8 +31,10 @@ pub struct MOJO_Model {
 #[repr(C)]
 pub struct MOJO_Pipeline {
     model: *const MOJO_Model,
-    flags: u32,
+    flags: MOJO_Transform_Flags_Type,
     output_count: usize,
+    // output_names: *const *const c_char,
+    // output_types: *const MOJO_DataType,
 }
 
 #[allow(non_camel_case_types)]
@@ -64,6 +67,9 @@ pub enum MOJO_DataType {
 }
 
 #[allow(non_camel_case_types)]
+pub type MOJO_Transform_Flags_Type = u32;
+
+#[allow(non_camel_case_types)]
 #[repr(C)]
 #[derive(Copy,Clone,Debug)]
 pub enum MOJO_Transform_Flags {
@@ -89,7 +95,7 @@ pub struct DaiMojoBindings {
     MOJO_NewModel: unsafe extern "C" fn(filename: *const c_char, tf_lib_prefix: *const c_char) -> *const MOJO_Model,
     MOJO_DeleteModel: unsafe extern "C" fn(mojo_model: *const MOJO_Model),
     // Pipeline
-    MOJO_NewPipeline: unsafe extern "C" fn(mojo_model: *const MOJO_Model, flags: RawFlags) -> *const MOJO_Pipeline,
+    MOJO_NewPipeline: unsafe extern "C" fn(mojo_model: *const MOJO_Model, flags: MOJO_Transform_Flags_Type) -> *const MOJO_Pipeline,
     MOJO_DeletePipeline: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline),
     MOJO_Transform: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, frame: *const MOJO_Frame, nrow: usize, debug: bool),
     /*?for now?*/
@@ -135,8 +141,6 @@ impl DaiMojoLibrary {
         Cow::from(&self.version)
     }
 }
-
-pub type RawFlags = u32;
 
 pub struct RawColumnMeta<'a> {
     pub name: Cow<'a, str>,
@@ -216,7 +220,7 @@ pub struct RawPipeline<'a> {
 }
 
 impl<'a> RawPipeline<'a> {
-    pub fn new(model: &'a RawModel, flags: RawFlags) -> error::Result<Self> {
+    pub fn new(model: &'a RawModel, flags: MOJO_Transform_Flags_Type) -> error::Result<Self> {
         let pipeline_ptr = unsafe { model.lib.api.MOJO_NewPipeline(model.model_ptr, flags)};
         Ok(Self {
             lib: model.lib,
@@ -327,7 +331,7 @@ fn columns_from<'a>(count: usize, mut pname: *const *const c_char, mut ptype: *c
 mod tests {
     use std::path::Path;
 
-    use crate::daimojo_library::{MOJO_Transform_Flags, RawFlags, RawPipeline};
+    use crate::daimojo_library::{MOJO_Transform_Flags, MOJO_Transform_Flags_Type, RawPipeline};
 
     use super::{DaiMojoLibrary, RawModel};
 
@@ -352,7 +356,7 @@ mod tests {
         for column in &features {
             println!("* {} : {:?}", column.name, column.column_type);
         }
-        let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as RawFlags).unwrap();
+        let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as MOJO_Transform_Flags_Type).unwrap();
         // outputs
         let outputs = pipeline.outputs();
         println!("Outputs[{}]:", outputs.len());

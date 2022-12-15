@@ -9,7 +9,7 @@ mod error;
 #[cfg(test)]
 mod tests {
     use std::path::Path;
-    use crate::daimojo_library::{DaiMojoLibrary, MOJO_Transform_Flags, RawFlags, RawFrame, RawModel, RawPipeline};
+    use crate::daimojo_library::{DaiMojoLibrary, MOJO_Transform_Flags, MOJO_Transform_Flags_Type, RawFrame, RawModel, RawPipeline};
     use crate::error;
 
     // const LIBDAIMOJO_SO: &str = "lib/linux_x64/libdaimojo.so";
@@ -23,7 +23,7 @@ mod tests {
         let model = RawModel::load(&lib, "data/iris/pipeline.mojo", "")?;
         println!("Pipeline UUID: {}", model.uuid());
         println!("Time created: {}", model.time_created_utc());
-        let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as RawFlags)?;
+        let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as MOJO_Transform_Flags_Type)?;
         let mut frame = RawFrame::new(&pipeline, 1)?;
         // fill input columns
         frame.input_f32_mut(0, /*"sepal_len"*/).unwrap()[0] = 5.1;
@@ -53,7 +53,7 @@ mod tests {
         let model = RawModel::load(&lib, "data/wine/pipeline.mojo", "")?;
         println!("Pipeline UUID: {}", model.uuid());
         println!("Time created: {}", model.time_created_utc());
-        let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as RawFlags)?;
+        let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as MOJO_Transform_Flags_Type)?;
         let mut frame = RawFrame::new(&pipeline, 5)?;
         // fill input columns
         let fixed_acidity = frame.input_f32_mut(0/*"fixed acidity"*/).unwrap();
