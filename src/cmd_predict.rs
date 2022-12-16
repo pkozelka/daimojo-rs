@@ -21,10 +21,10 @@ const MIN_BATCH_SIZE: usize = 1000;
 pub fn cmd_predict(pipeline: &RawPipeline, _output: Option<String>, input: Option<String>, batch_size: usize) -> anyhow::Result<u8> {
     let batch_size = batch_size_magic(&input, batch_size)?;
 
-    let mut frame = RawFrame::new(pipeline, batch_size)?;
+    let frame = RawFrame::new(pipeline, batch_size)?;
 
     let mut rdr = csv::Reader::from_path(input.unwrap())?;
-    let mut importer = FrameImporter::init(&pipeline, &mut frame, &mut rdr)?;
+    let mut importer = FrameImporter::init(&pipeline, &frame, &mut rdr)?;
     let mut exporter = FrameExporter::init(&pipeline, &frame)?;
     // read csv
     let mut rdr_iter = rdr.records();
@@ -32,7 +32,7 @@ pub fn cmd_predict(pipeline: &RawPipeline, _output: Option<String>, input: Optio
         let rows = importer.import_frame(&mut rdr_iter)?;
 
         // predict
-        pipeline.transform(&mut frame, rows, false)?;
+        pipeline.transform(&frame, rows, false)?;
         log::debug!("-- batch {rows} rows");
 
         // output csv
@@ -43,15 +43,15 @@ pub fn cmd_predict(pipeline: &RawPipeline, _output: Option<String>, input: Optio
     Ok(0)
 }
 
-struct FrameImporter {
-    icols: Vec<RawColumnBuffer>,
+struct FrameImporter<'a> {
+    icols: Vec<RawColumnBuffer<'a>>,
     csv_indices: Vec<usize>,
     batch_size: usize,
     eof: bool,
 }
 
-impl FrameImporter {
-    pub fn init(pipeline: &RawPipeline, frame: &mut RawFrame, rdr: &mut csv::Reader<std::fs::File>) -> std::io::Result<Self> {
+impl<'a> FrameImporter<'a> {
+    pub fn init(pipeline: &RawPipeline, frame: &'a RawFrame, rdr: &mut csv::Reader<std::fs::File>) -> std::io::Result<Self> {
         let model = pipeline.model;
         let csv_headers = match rdr.headers() {
             Err(e) => return Err(std::io::Error::new(ErrorKind::InvalidData, format!("Cannot read header: {e}"))),
@@ -78,7 +78,7 @@ impl FrameImporter {
     }
 
     pub fn import_frame(&mut self, rdr_iter: &mut csv::StringRecordsIter<std::fs::File>) -> std::io::Result<usize> {
-        let mut rows = 0;
+        let mut row = 0;
         if self.eof {
             return Ok(0);
         }
@@ -89,19 +89,19 @@ impl FrameImporter {
             for (feature_index, col) in &mut self.icols.iter_mut().enumerate() {
                 let csv_index = self.csv_indices[feature_index];
                 let value = record.get(csv_index).expect("column disappeared?");
-                Self::item_from_str(col, value);
+                Self::item_from_str(row, col, value);
             }
-            rows += 1;
-            if rows == self.batch_size {
-                return Ok(rows)
+            row += 1;
+            if row == self.batch_size {
+                return Ok(row)
             }
         }
         // ending prematurely => last batch
         self.eof = true;
-        Ok(rows)
+        Ok(row)
     }
 
-    fn item_from_str(col: &mut RawColumnBuffer, value: &str) {
+    fn item_from_str(row: usize, col: &mut RawColumnBuffer, value: &str) {
         // log::trace!("memset:{:?}:[@0x{:x}] = '{value}'", col.data_type, col.current as usize);
         match col.data_type {
             MOJO_DataType::MOJO_BOOL => {
@@ -125,23 +125,22 @@ impl FrameImporter {
                 col.unchecked_write_next(value);
             }
             MOJO_DataType::MOJO_STRING => {
-                // MOJO_Column_Write_Str(col.array_start, index, value.as_ptr());
-                todo!()
+                col.unchecked_write_str(row, value);
             }
             MOJO_DataType::MOJO_UNKNOWN => panic!("unsupported column type")
         }
     }
 }
 
-struct FrameExporter {
+struct FrameExporter<'a> {
     saved_batches: usize,
     saved_rows: usize,
     wtr: Writer<Stdout>,
-    ocols: Vec<RawColumnBuffer>,
+    ocols: Vec<RawColumnBuffer<'a>>,
 }
 
-impl FrameExporter {
-    fn init(pipeline: &RawPipeline, frame: &RawFrame) -> std::io::Result<Self> {
+impl<'a> FrameExporter<'a> {
+    fn init(pipeline: &RawPipeline, frame: &'a RawFrame) -> std::io::Result<Self> {
         let mut wtr = csv::Writer::from_writer(std::io::stdout());
         let mut ocols = Vec::new();
         for (index, col) in pipeline.outputs().iter().enumerate() {
@@ -156,9 +155,9 @@ impl FrameExporter {
 
     fn export_frame(&mut self, rows: usize) -> std::io::Result<()> {
         RawColumnBuffer::reset_current(&mut self.ocols);
-        for _ in 0..rows {
+        for row in 0..rows {
             for col in &mut self.ocols {
-                let s = Self::item_to_string(col);
+                let s = Self::item_to_string(row, col);
                 self.wtr.write_field(s)?;
             }
             self.wtr.write_record(None::<&[u8]>)?;
@@ -169,7 +168,7 @@ impl FrameExporter {
         Ok(())
     }
 
-    fn item_to_string(col: &mut RawColumnBuffer) -> String {
+    fn item_to_string(row: usize, col: &mut RawColumnBuffer) -> String {
         match col.data_type {
             MOJO_DataType::MOJO_BOOL => {
                 let value = col.unchecked_read_next::<bool>();
@@ -192,8 +191,7 @@ impl FrameExporter {
                 format!("{value}")
             }
             MOJO_DataType::MOJO_STRING => {
-                // let value = MOJO_Column_Read_Str(col.array_start, index));
-                todo!()
+                col.unchecked_read_string(row).to_string()
             }
             MOJO_DataType::MOJO_UNKNOWN => panic!("unsupported column type")
         }

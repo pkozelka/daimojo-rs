@@ -293,7 +293,7 @@ impl<'a> RawFrame<'a> {
             let model = (*self.pipeline_ptr).model;
             (*model).feature_types.offset(feature_index as isize).read()
         };
-        RawColumnBuffer::new(data_type, ptr)
+        RawColumnBuffer::new(self.lib, data_type, ptr)
     }
 
     pub unsafe fn output_data(&self, index: usize) -> *const u8 {
@@ -308,7 +308,7 @@ impl<'a> RawFrame<'a> {
             self.lib.api.MOJO_Output_Type(self.pipeline_ptr, output_index)
             // (*self.pipeline_ptr).output_types.offset(output_index as isize).read()
         };
-        RawColumnBuffer::new(data_type, ptr)
+        RawColumnBuffer::new(self.lib, data_type, ptr)
     }
 
     pub fn input_f32_mut(&mut self, index: usize) -> Option<&mut [f32]> {
@@ -332,16 +332,22 @@ impl<'a> Drop for RawFrame<'a> {
     }
 }
 
-pub struct RawColumnBuffer {
+pub struct RawColumnBuffer<'a> {
+    lib: &'a DaiMojoLibrary,
     pub data_type: MOJO_DataType,
     array_start: *const u8,
     current: *mut u8,
 }
 
-impl RawColumnBuffer {
+impl<'a> RawColumnBuffer<'a> {
 
-    fn new(data_type: MOJO_DataType, ptr: *const u8) -> Self {
-        Self { data_type, array_start: ptr, current: ptr as *mut u8 }
+    fn new(lib: &'a DaiMojoLibrary, data_type: MOJO_DataType, ptr: *const u8) -> Self {
+        Self {
+            lib,
+            data_type,
+            array_start: ptr,
+            current: ptr as *mut u8
+        }
     }
 
     pub fn reset_current(vec: &mut Vec<Self>) {
@@ -363,6 +369,20 @@ impl RawColumnBuffer {
             let p: *const T = transmute(self.current as usize);
             self.current = p.offset(1) as *mut u8;
             p.read()
+        }
+    }
+
+    pub fn unchecked_write_str(&mut self, row: usize, value: &str) {
+        unsafe {
+            let value = CString::from_vec_unchecked(value.as_bytes().to_vec());
+            self.lib.api.MOJO_Column_Write_Str(self.array_start as *mut u8, row, value.as_ptr());
+        }
+    }
+
+    pub fn unchecked_read_string(&mut self, row: usize) -> Cow<str>{
+        unsafe {
+            let value = self.lib.api.MOJO_Column_Read_Str(self.array_start as *mut u8, row);
+            CStr::from_ptr(value).to_string_lossy()
         }
     }
 }
