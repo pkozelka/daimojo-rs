@@ -65,7 +65,7 @@ impl FrameImporter {
             if let Some(&csv_index) = csv_headers.get(col.name.as_ref()) {
                 let ptr = unsafe { frame.input_data(index) }; //.expect(&format!("No buffer for input column '{}'", col.name));
                 // println!("Rust: input_data({index}='{}') -> {:X}", col.name, ptr as usize);
-                icols.push((ColumnData { data_type: col.column_type, array_start: ptr, current: ptr }, csv_index))
+                icols.push((ColumnData::new(col.column_type, ptr), csv_index));
             }
         }
         Ok(Self {
@@ -145,7 +145,7 @@ impl FrameExporter {
             wtr.write_field(&col.name.as_ref())?;
             let ptr = unsafe { frame.output_data(index) }; //.expect(&format!("No buffer for output column '{}'", col.name));
             // println!("Rust: output_data({index}='{}') -> {:X}", col.name, ptr as usize);
-            ocols.push(ColumnData { data_type: col.column_type, array_start: ptr, current: ptr as *mut u8 });
+            ocols.push(ColumnData::new(col.column_type, ptr));
         }
         wtr.write_record(None::<&[u8]>)?;
         wtr.flush()?;
@@ -205,6 +205,11 @@ struct ColumnData {
 }
 
 impl ColumnData  {
+
+    fn new(data_type: MOJO_DataType, ptr: *const u8) -> Self {
+        Self { data_type, array_start: ptr, current: ptr as *mut u8 }
+    }
+
     fn reset_current(vec: &mut Vec<Self>) {
         vec.iter_mut().for_each(|col| col.current = col.array_start as *mut u8);
     }
