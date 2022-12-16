@@ -64,9 +64,8 @@ impl FrameImporter {
         let mut csv_indices = Vec::new();
         for (index, col) in model.features().iter().enumerate() {
             if let Some(&csv_index) = csv_headers.get(col.name.as_ref()) {
-                let ptr = unsafe { frame.input_data(index) }; //.expect(&format!("No buffer for input column '{}'", col.name));
                 // println!("Rust: input_data({index}='{}') -> {:X}", col.name, ptr as usize);
-                icols.push(RawColumnBuffer::new(col.column_type, ptr));
+                icols.push(frame.input_col(index));
                 csv_indices.push(csv_index);
             }
         }
@@ -147,9 +146,8 @@ impl FrameExporter {
         let mut ocols = Vec::new();
         for (index, col) in pipeline.outputs().iter().enumerate() {
             wtr.write_field(&col.name.as_ref())?;
-            let ptr = unsafe { frame.output_data(index) }; //.expect(&format!("No buffer for output column '{}'", col.name));
             // println!("Rust: output_data({index}='{}') -> {:X}", col.name, ptr as usize);
-            ocols.push(RawColumnBuffer::new(col.column_type, ptr));
+            ocols.push(frame.output_col(index));
         }
         wtr.write_record(None::<&[u8]>)?;
         wtr.flush()?;

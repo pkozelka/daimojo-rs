@@ -287,10 +287,28 @@ impl<'a> RawFrame<'a> {
         }
     }
 
+    pub fn input_col(&self, feature_index: usize) -> RawColumnBuffer {
+        let ptr = unsafe { self.input_data(feature_index) }; //.expect(&format!("No buffer for input column '{}'", col.name));
+        let data_type = unsafe {
+            let model = (*self.pipeline_ptr).model;
+            (*model).feature_types.offset(feature_index as isize).read()
+        };
+        RawColumnBuffer::new(data_type, ptr)
+    }
+
     pub unsafe fn output_data(&self, index: usize) -> *const u8 {
         unsafe {
             self.lib.api.MOJO_Output_Data(self.pipeline_ptr, self.frame_ptr, index)
         }
+    }
+
+    pub fn output_col(&self, output_index: usize) -> RawColumnBuffer {
+        let ptr = unsafe { self.output_data(output_index) }; //.expect(&format!("No buffer for input column '{}'", col.name));
+        let data_type = unsafe {
+            self.lib.api.MOJO_Output_Type(self.pipeline_ptr, output_index)
+            // (*self.pipeline_ptr).output_types.offset(output_index as isize).read()
+        };
+        RawColumnBuffer::new(data_type, ptr)
     }
 
     pub fn input_f32_mut(&mut self, index: usize) -> Option<&mut [f32]> {
@@ -322,7 +340,7 @@ pub struct RawColumnBuffer {
 
 impl RawColumnBuffer {
 
-    pub fn new(data_type: MOJO_DataType, ptr: *const u8) -> Self {
+    fn new(data_type: MOJO_DataType, ptr: *const u8) -> Self {
         Self { data_type, array_start: ptr, current: ptr as *mut u8 }
     }
 
