@@ -1,5 +1,6 @@
 extern crate core;
 
+use std::borrow::Cow;
 use std::process::ExitCode;
 use clap::{ArgAction, Parser, Subcommand};
 use log::LevelFilter;
@@ -97,7 +98,7 @@ fn show_pipeline(lib: &DaiMojoLibrary, mojo: &str) -> anyhow::Result<u8> {
     let model = load_model(lib, mojo)?;
     println!("* UUID: {}", model.uuid());
     println!("* Time created: {}", model.time_created_utc());
-    println!("* Missing values: {}", model.missing_values().join(", "));
+    println!("* Missing values: {}", model.missing_values().collect::<Vec<Cow<str>>>().join(", "));
     let features = model.features_meta();
     println!("Input features[{}]:", features.len());
     for RawColumnMeta { name, column_type} in features {

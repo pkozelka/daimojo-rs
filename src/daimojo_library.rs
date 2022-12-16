@@ -12,6 +12,7 @@ use std::path::Path;
 use chrono::{DateTime, NaiveDateTime, Utc};
 use dlopen2::wrapper::{Container, WrapperApi};
 
+use crate::carray::{CArrayIterator, CTwinArrayIterator, pchar_to_cowstr};
 use crate::error;
 
 #[allow(non_camel_case_types)]
@@ -177,7 +178,7 @@ impl<'a> RawModel<'a> {
     }
 
     pub fn uuid(&self) -> Cow<str> {
-        unsafe { CStr::from_ptr((*self.model_ptr).uuid) }.to_string_lossy()
+        pchar_to_cowstr(unsafe { (*self.model_ptr).uuid })
     }
 
     pub fn time_created_utc(&self) -> DateTime<Utc> {
@@ -186,73 +187,42 @@ impl<'a> RawModel<'a> {
         DateTime::from_utc(n, Utc)
     }
 
-    pub fn missing_values(&self) -> Vec<Cow<str>> {
+    pub fn missing_values(&self) -> impl Iterator<Item=Cow<'a, str>> {
         unsafe {
+            let ptr = (*self.model_ptr).missing_values;
             let count = (*self.model_ptr).missing_values_count;
-            let mut vec = Vec::with_capacity(count);
-            let mut p = (*self.model_ptr).missing_values;
-            for _ in 0..count {
-                let s = CStr::from_ptr(p.read()).to_string_lossy();
-                p = p.add(1);
-                vec.push(s);
-            }
-            vec
-        }
+            CArrayIterator::new(ptr, count)
+        }.map(pchar_to_cowstr)
     }
 
-    pub fn features_meta(&self) -> Vec<RawColumnMeta<'a>> {
+    pub fn features(&self) -> impl Iterator<Item=(Cow<'a, str>, MOJO_DataType)> {
         unsafe {
             let count = (*self.model_ptr).feature_count;
             let pname = (*self.model_ptr).feature_names;
             let ptype = (*self.model_ptr).feature_types;
-            columns_from(count, pname, ptype)
-        }
+            CTwinArrayIterator::new(count, pname, ptype)
+        }.map(|(cname, ctype)| (pchar_to_cowstr(cname), ctype))
+    }
+
+    pub fn features_meta(&self) -> Vec<RawColumnMeta<'a>> {
+        self.features()
+            .map(|(name,column_type)| RawColumnMeta { name, column_type })
+            .collect()
     }
 
     pub fn feature_names(&'a self) -> impl Iterator<Item=Cow<'a, str>> {
         unsafe {
-            // let model = (*self.model_ptr).feature_names;
             let ptr = (*self.model_ptr).feature_names;
             let count = (*self.model_ptr).feature_count;
-            CArrayIterator { ptr, count }.map(|p| {
-                CStr::from_ptr(p).to_string_lossy()
-            })
-        }
+            CArrayIterator::new(ptr, count)
+        }.map(pchar_to_cowstr)
     }
 
     pub fn feature_types(&self) -> impl Iterator<Item=MOJO_DataType> {
         unsafe {
-            // let model = (*self.model_ptr).feature_names;
             let ptr = (*self.model_ptr).feature_types;
             let count = (*self.model_ptr).feature_count;
-            CArrayIterator { ptr, count }
-        }
-    }
-}
-
-/// Iterates through a C array of any type [T] described by pointer and element count.
-struct CArrayIterator<T> {
-    /// Pointer to the array
-    ptr: *const T,
-    /// Number of remaining elements in the array
-    count: usize,
-}
-
-impl<T> Iterator for CArrayIterator<T>{
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.count == 0 {
-            None
-        } else {
-            self.count -= 1;
-            // SAFETY: The caller provides pointer to array of T and its correct size.
-            // Therefore we just have to stop before reaching the end.
-            unsafe {
-                let value = self.ptr.read();
-                self.ptr = self.ptr.add(1);
-                Some(value)
-            }
+            CArrayIterator::new(ptr, count)
         }
     }
 }
@@ -280,16 +250,14 @@ impl<'a> RawPipeline<'a> {
         })
     }
 
-/*
+/* TODO @1587
     pub fn output_names(&'a self) -> impl Iterator<Item=Cow<'a, str>> {
         unsafe {
             // let model = (*self.model_ptr).feature_names;
             let ptr = (*self.pipeline_ptr).feature_names;
             let count = (*self.pipeline_ptr).feature_count;
-            CArrayIterator { ptr, count }.map(|p| {
-                CStr::from_ptr(p).to_string_lossy()
-            })
-        }
+            CArrayIterator { ptr, count }
+        }.map(pchar_to_cowstr)
     }
 
     pub fn output_types(&self) -> impl Iterator<Item=MOJO_DataType> {
@@ -456,21 +424,6 @@ impl<'a> RawColumnBuffer<'a> {
             CStr::from_ptr(value).to_string_lossy()
         }
     }
-}
-
-
-fn columns_from<'a>(count: usize, mut pname: *const *const c_char, mut ptype: *const MOJO_DataType) -> Vec<RawColumnMeta<'a>> {
-    let mut columns = Vec::with_capacity(count);
-    for _ in 0..count {
-        unsafe {
-            let cname = CStr::from_ptr(pname.read()).to_string_lossy();
-            pname = pname.add(1);
-            let ctype = ptype.read();
-            ptype = ptype.add(1);
-            columns.push(RawColumnMeta { name: cname, column_type: ctype });
-        }
-    }
-    columns
 }
 
 #[cfg(test)]

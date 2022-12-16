@@ -4,6 +4,7 @@
 pub use error::{MojoError,Result};
 
 pub mod daimojo_library;
+mod carray;
 mod error;
 
 #[cfg(test)]
