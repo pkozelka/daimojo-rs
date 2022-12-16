@@ -45,7 +45,8 @@ pub fn cmd_predict(pipeline: &RawPipeline, _output: Option<String>, input: Optio
 }
 
 struct FrameImporter {
-    icols: Vec<(ColumnData, usize)>,
+    icols: Vec<ColumnData>,
+    csv_indices: Vec<usize>,
     batch_size: usize,
     eof: bool,
 }
@@ -61,15 +62,18 @@ impl FrameImporter {
             .map(|(csv_index, col_name)| (col_name, csv_index))
             .collect::<HashMap<&str, usize>>();
         let mut icols = Vec::new();
+        let mut csv_indices = Vec::new();
         for (index, col) in model.features().iter().enumerate() {
             if let Some(&csv_index) = csv_headers.get(col.name.as_ref()) {
                 let ptr = unsafe { frame.input_data(index) }; //.expect(&format!("No buffer for input column '{}'", col.name));
                 // println!("Rust: input_data({index}='{}') -> {:X}", col.name, ptr as usize);
-                icols.push((ColumnData::new(col.column_type, ptr), csv_index));
+                icols.push(ColumnData::new(col.column_type, ptr));
+                csv_indices.push(csv_index);
             }
         }
         Ok(Self {
             icols,
+            csv_indices,
             batch_size: frame.nrow,
             eof: rdr.is_done()
         })
@@ -80,12 +84,13 @@ impl FrameImporter {
         if self.eof {
             return Ok(0);
         }
-        ColumnData::reset_current_tuple(&mut self.icols);
+        ColumnData::reset_current(&mut self.icols);
         for record in rdr_iter {
             let record = record?;
             // fill mojo row
-            for (col, csv_index) in &mut self.icols {
-                let value = record.get(*csv_index).expect("column disappeared?");
+            for (feature_index, col) in &mut self.icols.iter_mut().enumerate() {
+                let csv_index = self.csv_indices[feature_index];
+                let value = record.get(csv_index).expect("column disappeared?");
                 Self::item_from_str(col, value);
             }
             rows += 1;
@@ -212,10 +217,6 @@ impl ColumnData  {
 
     fn reset_current(vec: &mut Vec<Self>) {
         vec.iter_mut().for_each(|col| col.current = col.array_start as *mut u8);
-    }
-
-    fn reset_current_tuple<T>(vec: &mut Vec<(Self,T)>) {
-        vec.iter_mut().for_each(|(col,_)| col.current = col.array_start as *mut u8);
     }
 
     /// Write value to array at provided pointer, and move the pointer to the next item
