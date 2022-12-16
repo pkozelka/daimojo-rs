@@ -62,8 +62,8 @@ impl<'a> FrameImporter<'a> {
             .collect::<HashMap<&str, usize>>();
         let mut icols = Vec::new();
         let mut csv_indices = Vec::new();
-        for (index, col) in model.features_meta().iter().enumerate() {
-            if let Some(&csv_index) = csv_headers.get(col.name.as_ref()) {
+        for (index, col) in model.feature_names().enumerate() {
+            if let Some(&csv_index) = csv_headers.get(col.as_ref()) {
                 // println!("Rust: input_data({index}='{}') -> {:X}", col.name, ptr as usize);
                 icols.push(frame.input_col(index));
                 csv_indices.push(csv_index);

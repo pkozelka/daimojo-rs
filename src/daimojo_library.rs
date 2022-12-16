@@ -208,6 +208,53 @@ impl<'a> RawModel<'a> {
             columns_from(count, pname, ptype)
         }
     }
+
+    pub fn feature_names(&'a self) -> impl Iterator<Item=Cow<'a, str>> {
+        unsafe {
+            // let model = (*self.model_ptr).feature_names;
+            let ptr = (*self.model_ptr).feature_names;
+            let count = (*self.model_ptr).feature_count;
+            CArrayIterator { ptr, count }.map(|p| {
+                CStr::from_ptr(p).to_string_lossy()
+            })
+        }
+    }
+
+    pub fn feature_types(&self) -> impl Iterator<Item=MOJO_DataType> {
+        unsafe {
+            // let model = (*self.model_ptr).feature_names;
+            let ptr = (*self.model_ptr).feature_types;
+            let count = (*self.model_ptr).feature_count;
+            CArrayIterator { ptr, count }
+        }
+    }
+}
+
+/// Iterates through a C array of any type [T] described by pointer and element count.
+struct CArrayIterator<T> {
+    /// Pointer to the array
+    ptr: *const T,
+    /// Number of remaining elements in the array
+    count: usize,
+}
+
+impl<T> Iterator for CArrayIterator<T>{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.count == 0 {
+            None
+        } else {
+            self.count -= 1;
+            // SAFETY: The caller provides pointer to array of T and its correct size.
+            // Therefore we just have to stop before reaching the end.
+            unsafe {
+                let value = self.ptr.read();
+                self.ptr = self.ptr.add(1);
+                Some(value)
+            }
+        }
+    }
 }
 
 impl <'a> Drop for RawModel<'a> {
@@ -233,6 +280,27 @@ impl<'a> RawPipeline<'a> {
         })
     }
 
+/*
+    pub fn output_names(&'a self) -> impl Iterator<Item=Cow<'a, str>> {
+        unsafe {
+            // let model = (*self.model_ptr).feature_names;
+            let ptr = (*self.pipeline_ptr).feature_names;
+            let count = (*self.pipeline_ptr).feature_count;
+            CArrayIterator { ptr, count }.map(|p| {
+                CStr::from_ptr(p).to_string_lossy()
+            })
+        }
+    }
+
+    pub fn output_types(&self) -> impl Iterator<Item=MOJO_DataType> {
+        unsafe {
+            // let model = (*self.model_ptr).feature_names;
+            let ptr = (*self.model_ptr).feature_types;
+            let count = (*self.model_ptr).feature_count;
+            CArrayIterator { ptr, count }
+        }
+    }
+*/
     pub fn outputs_meta(&self) -> Vec<RawColumnMeta<'a>> {
         unsafe {
             let count = (*self.pipeline_ptr).output_count;
