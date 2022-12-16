@@ -5,6 +5,7 @@
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::io::ErrorKind;
+use std::mem::transmute;
 use std::os::raw::c_char;
 use std::path::Path;
 
@@ -295,14 +296,14 @@ impl<'a> RawFrame<'a> {
     pub fn input_f32_mut(&mut self, index: usize) -> Option<&mut [f32]> {
         Some(unsafe {
             let data = self.input_data(index);
-            std::slice::from_raw_parts_mut(std::mem::transmute(data), self.nrow)
+            std::slice::from_raw_parts_mut(transmute(data), self.nrow)
         })
     }
 
     pub fn output_f32(&self, index: usize) -> Option<&[f32]> {
         Some(unsafe {
             let data = self.output_data(index);
-            std::slice::from_raw_parts(std::mem::transmute(data), self.nrow)
+            std::slice::from_raw_parts(transmute(data), self.nrow)
         })
     }
 }
@@ -312,6 +313,42 @@ impl<'a> Drop for RawFrame<'a> {
         unsafe { self.lib.api.MOJO_DeleteFrame(self.frame_ptr) };
     }
 }
+
+pub struct RawColumnBuffer {
+    pub data_type: MOJO_DataType,
+    array_start: *const u8,
+    current: *mut u8,
+}
+
+impl RawColumnBuffer {
+
+    pub fn new(data_type: MOJO_DataType, ptr: *const u8) -> Self {
+        Self { data_type, array_start: ptr, current: ptr as *mut u8 }
+    }
+
+    pub fn reset_current(vec: &mut Vec<Self>) {
+        vec.iter_mut().for_each(|col| col.current = col.array_start as *mut u8);
+    }
+
+    /// Write value to array at provided pointer, and move the pointer to the next item
+    pub fn unchecked_write_next<T: Copy>(&mut self, value: T) {
+        unsafe {
+            let p: *mut T = transmute(self.current as usize);
+            self.current = p.offset(1) as *mut u8;
+            p.write(value)
+        }
+    }
+
+    /// Read value from array at provided pointer, and move the pointer to the next item
+    pub fn unchecked_read_next<T: Copy>(&mut self) -> T {
+        unsafe {
+            let p: *const T = transmute(self.current as usize);
+            self.current = p.offset(1) as *mut u8;
+            p.read()
+        }
+    }
+}
+
 
 fn columns_from<'a>(count: usize, mut pname: *const *const c_char, mut ptype: *const MOJO_DataType) -> Vec<RawColumnMeta<'a>> {
     let mut columns = Vec::with_capacity(count);

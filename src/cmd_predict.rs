@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use std::io::{ErrorKind, Stdout};
-use std::mem::transmute;
 use csv::Writer;
-use daimojo::daimojo_library::{MOJO_DataType, RawFrame, RawPipeline};
+use daimojo::daimojo_library::{MOJO_DataType, RawColumnBuffer, RawFrame, RawPipeline};
 
 const MOJO_I32_NAN: i32 = i32::MAX;
 const MOJO_I64_NAN: i64 = i64::MAX;
@@ -45,7 +44,7 @@ pub fn cmd_predict(pipeline: &RawPipeline, _output: Option<String>, input: Optio
 }
 
 struct FrameImporter {
-    icols: Vec<ColumnData>,
+    icols: Vec<RawColumnBuffer>,
     csv_indices: Vec<usize>,
     batch_size: usize,
     eof: bool,
@@ -67,7 +66,7 @@ impl FrameImporter {
             if let Some(&csv_index) = csv_headers.get(col.name.as_ref()) {
                 let ptr = unsafe { frame.input_data(index) }; //.expect(&format!("No buffer for input column '{}'", col.name));
                 // println!("Rust: input_data({index}='{}') -> {:X}", col.name, ptr as usize);
-                icols.push(ColumnData::new(col.column_type, ptr));
+                icols.push(RawColumnBuffer::new(col.column_type, ptr));
                 csv_indices.push(csv_index);
             }
         }
@@ -84,7 +83,7 @@ impl FrameImporter {
         if self.eof {
             return Ok(0);
         }
-        ColumnData::reset_current(&mut self.icols);
+        RawColumnBuffer::reset_current(&mut self.icols);
         for record in rdr_iter {
             let record = record?;
             // fill mojo row
@@ -103,8 +102,8 @@ impl FrameImporter {
         Ok(rows)
     }
 
-    fn item_from_str(col: &mut ColumnData, value: &str) {
-        log::trace!("memset:{:?}:[@0x{:x}] = '{value}'", col.data_type, col.current as usize);
+    fn item_from_str(col: &mut RawColumnBuffer, value: &str) {
+        // log::trace!("memset:{:?}:[@0x{:x}] = '{value}'", col.data_type, col.current as usize);
         match col.data_type {
             MOJO_DataType::MOJO_BOOL => {
                 let value = mojo2_parse_bool(value);
@@ -139,7 +138,7 @@ struct FrameExporter {
     saved_batches: usize,
     saved_rows: usize,
     wtr: Writer<Stdout>,
-    ocols: Vec<ColumnData>,
+    ocols: Vec<RawColumnBuffer>,
 }
 
 impl FrameExporter {
@@ -150,7 +149,7 @@ impl FrameExporter {
             wtr.write_field(&col.name.as_ref())?;
             let ptr = unsafe { frame.output_data(index) }; //.expect(&format!("No buffer for output column '{}'", col.name));
             // println!("Rust: output_data({index}='{}') -> {:X}", col.name, ptr as usize);
-            ocols.push(ColumnData::new(col.column_type, ptr));
+            ocols.push(RawColumnBuffer::new(col.column_type, ptr));
         }
         wtr.write_record(None::<&[u8]>)?;
         wtr.flush()?;
@@ -158,7 +157,7 @@ impl FrameExporter {
     }
 
     fn export_frame(&mut self, rows: usize) -> std::io::Result<()> {
-        ColumnData::reset_current(&mut self.ocols);
+        RawColumnBuffer::reset_current(&mut self.ocols);
         for _ in 0..rows {
             for col in &mut self.ocols {
                 let s = Self::item_to_string(col);
@@ -172,7 +171,7 @@ impl FrameExporter {
         Ok(())
     }
 
-    fn item_to_string(col: &mut ColumnData) -> String {
+    fn item_to_string(col: &mut RawColumnBuffer) -> String {
         match col.data_type {
             MOJO_DataType::MOJO_BOOL => {
                 let value = col.unchecked_read_next::<bool>();
@@ -199,41 +198,6 @@ impl FrameExporter {
                 todo!()
             }
             MOJO_DataType::MOJO_UNKNOWN => panic!("unsupported column type")
-        }
-    }
-}
-
-struct ColumnData {
-    data_type: MOJO_DataType,
-    array_start: *const u8,
-    current: *mut u8,
-}
-
-impl ColumnData  {
-
-    fn new(data_type: MOJO_DataType, ptr: *const u8) -> Self {
-        Self { data_type, array_start: ptr, current: ptr as *mut u8 }
-    }
-
-    fn reset_current(vec: &mut Vec<Self>) {
-        vec.iter_mut().for_each(|col| col.current = col.array_start as *mut u8);
-    }
-
-    /// Write value to array at provided pointer, and move the pointer to the next item
-    fn unchecked_write_next<T: Copy>(&mut self, value: T) {
-        unsafe {
-            let p: *mut T = transmute(self.current as usize);
-            self.current = p.offset(1) as *mut u8;
-            p.write(value)
-        }
-    }
-
-    /// Read value from array at provided pointer, and move the pointer to the next item
-    fn unchecked_read_next<T: Copy>(&mut self) -> T {
-        unsafe {
-            let p: *const T = transmute(self.current as usize);
-            self.current = p.offset(1) as *mut u8;
-            p.read()
         }
     }
 }
