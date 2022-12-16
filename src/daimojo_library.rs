@@ -17,9 +17,12 @@ use crate::error;
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct MOJO_Model {
-    // capabilities: MOJO_Transform_Flags_Type,
+    //1589: capabilities: MOJO_Transform_Flags_Type,
     is_valid: bool,
     uuid: *const c_char,
+    //1590: dai_version: *const c_char,
+    //? experiment_id: *const c_char,
+    //? experiment_name: *const c_char,
     time_created: u64,
     missing_values_count: usize,
     missing_values: *const *const c_char,
@@ -34,8 +37,8 @@ pub struct MOJO_Pipeline {
     model: *const MOJO_Model,
     flags: MOJO_Transform_Flags_Type,
     output_count: usize,
-    // output_names: *const *const c_char,
-    // output_types: *const MOJO_DataType,
+    //1587: output_names: *const *const c_char,
+    //1587: output_types: *const MOJO_DataType,
 }
 
 #[allow(non_camel_case_types)]
@@ -99,9 +102,9 @@ pub struct DaiMojoBindings {
     MOJO_NewPipeline: unsafe extern "C" fn(mojo_model: *const MOJO_Model, flags: MOJO_Transform_Flags_Type) -> *const MOJO_Pipeline,
     MOJO_DeletePipeline: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline),
     MOJO_Transform: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, frame: *const MOJO_Frame, nrow: usize, debug: bool),
-    /*?for now?*/
+    /*?for now?1587*/
     MOJO_Output_Name: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, index: usize) -> *const c_char,
-    /*?for now?*/
+    /*?for now?1587*/
     MOJO_Output_Type: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, index: usize) -> MOJO_DataType,
     // Frame
     MOJO_Pipeline_NewFrame: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, nrow: usize) -> *const MOJO_Frame,
