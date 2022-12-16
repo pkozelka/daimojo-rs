@@ -200,7 +200,7 @@ impl<'a> RawModel<'a> {
         }
     }
 
-    pub fn features(&self) -> Vec<RawColumnMeta<'a>> {
+    pub fn features_meta(&self) -> Vec<RawColumnMeta<'a>> {
         unsafe {
             let count = (*self.model_ptr).feature_count;
             let pname = (*self.model_ptr).feature_names;
@@ -233,7 +233,7 @@ impl<'a> RawPipeline<'a> {
         })
     }
 
-    pub fn outputs(&self) -> Vec<RawColumnMeta<'a>> {
+    pub fn outputs_meta(&self) -> Vec<RawColumnMeta<'a>> {
         unsafe {
             let count = (*self.pipeline_ptr).output_count;
             let mut columns = Vec::with_capacity(count);
@@ -429,14 +429,14 @@ mod tests {
         println!("TimeCreated: {}", model.time_created_utc());
         let missing_values = &model.missing_values();
         println!("Missing values[{}]: {}", missing_values.len(), missing_values.join(", "));
-        let features = model.features();
+        let features = model.features_meta();
         println!("Features[{}]:", features.len());
         for column in &features {
             println!("* {} : {:?}", column.name, column.column_type);
         }
         let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as MOJO_Transform_Flags_Type).unwrap();
         // outputs
-        let outputs = pipeline.outputs();
+        let outputs = pipeline.outputs_meta();
         println!("Outputs[{}]:", outputs.len());
         for column in &outputs {
             println!("* {} : {:?}", column.name, column.column_type);

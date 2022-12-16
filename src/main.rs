@@ -98,13 +98,13 @@ fn show_pipeline(lib: &DaiMojoLibrary, mojo: &str) -> anyhow::Result<u8> {
     println!("* UUID: {}", model.uuid());
     println!("* Time created: {}", model.time_created_utc());
     println!("* Missing values: {}", model.missing_values().join(", "));
-    let features = model.features();
+    let features = model.features_meta();
     println!("Input features[{}]:", features.len());
     for RawColumnMeta { name, column_type} in features {
         println!("* '{name}': {column_type:?}");
     }
     let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as MOJO_Transform_Flags_Type)?; //TODO
-    let outputs = pipeline.outputs();
+    let outputs = pipeline.outputs_meta();
     println!("Output columns[{}]:", outputs.len());
     for RawColumnMeta { name, column_type} in outputs {
         println!("* '{name}': {column_type:?}");

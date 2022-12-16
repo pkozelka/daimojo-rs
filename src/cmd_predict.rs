@@ -62,7 +62,7 @@ impl<'a> FrameImporter<'a> {
             .collect::<HashMap<&str, usize>>();
         let mut icols = Vec::new();
         let mut csv_indices = Vec::new();
-        for (index, col) in model.features().iter().enumerate() {
+        for (index, col) in model.features_meta().iter().enumerate() {
             if let Some(&csv_index) = csv_headers.get(col.name.as_ref()) {
                 // println!("Rust: input_data({index}='{}') -> {:X}", col.name, ptr as usize);
                 icols.push(frame.input_col(index));
@@ -143,7 +143,7 @@ impl<'a> FrameExporter<'a> {
     fn init(pipeline: &RawPipeline, frame: &'a RawFrame) -> std::io::Result<Self> {
         let mut wtr = csv::Writer::from_writer(std::io::stdout());
         let mut ocols = Vec::new();
-        for (index, col) in pipeline.outputs().iter().enumerate() {
+        for (index, col) in pipeline.outputs_meta().iter().enumerate() {
             wtr.write_field(&col.name.as_ref())?;
             // println!("Rust: output_data({index}='{}') -> {:X}", col.name, ptr as usize);
             ocols.push(frame.output_col(index));
