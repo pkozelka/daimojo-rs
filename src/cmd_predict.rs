@@ -86,7 +86,7 @@ impl FrameImporter {
             // fill mojo row
             for (col, csv_index) in &mut self.icols {
                 let value = record.get(*csv_index).expect("column disappeared?");
-                col.item_from_str(value);
+                Self::item_from_str(col, value);
             }
             rows += 1;
             if rows == self.batch_size {
@@ -96,6 +96,37 @@ impl FrameImporter {
         // ending prematurely => last batch
         self.eof = true;
         Ok(rows)
+    }
+
+    fn item_from_str(col: &mut ColumnData, value: &str) {
+        log::trace!("memset:{:?}:[@0x{:x}] = '{value}'", col.data_type, col.current as usize);
+        match col.data_type {
+            MOJO_DataType::MOJO_BOOL => {
+                let value = mojo2_parse_bool(value);
+                col.unchecked_write_next(value);
+            }
+            MOJO_DataType::MOJO_FLOAT => {
+                let value = value.parse::<f32>().unwrap_or(f32::NAN);
+                col.unchecked_write_next(value);
+            }
+            MOJO_DataType::MOJO_DOUBLE => {
+                let value = value.parse::<f64>().unwrap_or(f64::NAN);
+                col.unchecked_write_next(value);
+            }
+            MOJO_DataType::MOJO_INT32 => {
+                let value = value.parse::<i32>().unwrap_or(MOJO_I32_NAN);
+                col.unchecked_write_next(value);
+            }
+            MOJO_DataType::MOJO_INT64 => {
+                let value = value.parse::<i64>().unwrap_or(MOJO_I64_NAN);
+                col.unchecked_write_next(value);
+            }
+            MOJO_DataType::MOJO_STRING => {
+                // MOJO_Column_Write_Str(col.array_start, index, value.as_ptr());
+                todo!()
+            }
+            MOJO_DataType::MOJO_UNKNOWN => panic!("unsupported column type")
+        }
     }
 }
 
@@ -125,7 +156,7 @@ impl FrameExporter {
         ColumnData::reset_current(&mut self.ocols);
         for _ in 0..rows {
             for col in &mut self.ocols {
-                let s = col.item_to_string();
+                let s = Self::item_to_string(col);
                 self.wtr.write_field(s)?;
             }
             self.wtr.write_record(None::<&[u8]>)?;
@@ -134,6 +165,36 @@ impl FrameExporter {
         self.saved_batches += 1;
         self.saved_rows += rows;
         Ok(())
+    }
+
+    fn item_to_string(col: &mut ColumnData) -> String {
+        match col.data_type {
+            MOJO_DataType::MOJO_BOOL => {
+                let value = col.unchecked_read_next::<bool>();
+                format!("{value}")
+            }
+            MOJO_DataType::MOJO_FLOAT => {
+                let value = col.unchecked_read_next::<f32>();
+                format!("{value}")
+            }
+            MOJO_DataType::MOJO_DOUBLE => {
+                let value = col.unchecked_read_next::<f64>();
+                format!("{value}")
+            }
+            MOJO_DataType::MOJO_INT32 => {
+                let value = col.unchecked_read_next::<i32>();
+                format!("{value}")
+            }
+            MOJO_DataType::MOJO_INT64 => {
+                let value = col.unchecked_read_next::<i64>();
+                format!("{value}")
+            }
+            MOJO_DataType::MOJO_STRING => {
+                // let value = MOJO_Column_Read_Str(col.array_start, index));
+                todo!()
+            }
+            MOJO_DataType::MOJO_UNKNOWN => panic!("unsupported column type")
+        }
     }
 }
 
@@ -161,73 +222,12 @@ impl ColumnData  {
         }
     }
 
-    fn item_from_str(&mut self, value: &str) {
-        log::trace!("memset:{:?}:[@0x{:x}] = '{value}'",self.data_type, self.current as usize);
-        match self.data_type {
-            MOJO_DataType::MOJO_BOOL => {
-                let value = mojo2_parse_bool(value);
-                self.unchecked_write_next(value);
-            }
-            MOJO_DataType::MOJO_FLOAT => {
-                let value = value.parse::<f32>().unwrap_or(f32::NAN);
-                self.unchecked_write_next(value);
-            }
-            MOJO_DataType::MOJO_DOUBLE => {
-                let value = value.parse::<f64>().unwrap_or(f64::NAN);
-                self.unchecked_write_next(value);
-            }
-            MOJO_DataType::MOJO_INT32 => {
-                let value = value.parse::<i32>().unwrap_or(MOJO_I32_NAN);
-                self.unchecked_write_next(value);
-            }
-            MOJO_DataType::MOJO_INT64 => {
-                let value = value.parse::<i64>().unwrap_or(MOJO_I64_NAN);
-                self.unchecked_write_next(value);
-            }
-            MOJO_DataType::MOJO_STRING => {
-                // MOJO_Column_Write_Str(self.array_start, index, value.as_ptr());
-                todo!()
-            }
-            MOJO_DataType::MOJO_UNKNOWN => panic!("unsupported column type")
-        }
-    }
-
     /// Read value from array at provided pointer, and move the pointer to the next item
     fn unchecked_read_next<T: Copy>(&mut self) -> T {
         unsafe {
             let p: *const T = transmute(self.current as usize);
             self.current = p.offset(1) as *mut u8;
             p.read()
-        }
-    }
-
-    fn item_to_string(&mut self) -> String {
-        match self.data_type {
-            MOJO_DataType::MOJO_BOOL => {
-                let value = self.unchecked_read_next::<bool>();
-                format!("{value}")
-            }
-            MOJO_DataType::MOJO_FLOAT => {
-                let value = self.unchecked_read_next::<f32>();
-                format!("{value}")
-            }
-            MOJO_DataType::MOJO_DOUBLE => {
-                let value = self.unchecked_read_next::<f64>();
-                format!("{value}")
-            }
-            MOJO_DataType::MOJO_INT32 => {
-                let value = self.unchecked_read_next::<i32>();
-                format!("{value}")
-            }
-            MOJO_DataType::MOJO_INT64 => {
-                let value = self.unchecked_read_next::<i64>();
-                format!("{value}")
-            }
-            MOJO_DataType::MOJO_STRING => {
-                // let value = MOJO_Column_Read_Str(self.array_start, index));
-                todo!()
-            }
-            MOJO_DataType::MOJO_UNKNOWN => panic!("unsupported column type")
         }
     }
 }
