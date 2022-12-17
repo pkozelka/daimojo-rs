@@ -9,7 +9,7 @@ pub struct FrameImporter<'a> {
     icols: Vec<RawColumnBuffer<'a>>,
     csv_indices: Vec<usize>,
     batch_size: usize,
-    pub eof: bool,
+    eof: bool,
 }
 
 impl<'a> FrameImporter<'a> {
@@ -39,10 +39,10 @@ impl<'a> FrameImporter<'a> {
         })
     }
 
-    pub fn import_frame(&mut self, rdr_iter: &mut csv::StringRecordsIter<std::fs::File>) -> std::io::Result<usize> {
+    pub fn import_frame(&mut self, rdr_iter: &mut csv::StringRecordsIter<std::fs::File>) -> std::io::Result<Option<usize>> {
         let mut row = 0;
         if self.eof {
-            return Ok(0);
+            return Ok(None);
         }
         RawColumnBuffer::reset_current(&mut self.icols);
         for record in rdr_iter {
@@ -55,12 +55,12 @@ impl<'a> FrameImporter<'a> {
             }
             row += 1;
             if row == self.batch_size {
-                return Ok(row)
+                return Ok(Some(row))
             }
         }
         // ending prematurely => last batch
         self.eof = true;
-        Ok(row)
+        Ok(if row == 0 { None } else { Some(row) })
     }
 
     fn item_from_str(row: usize, col: &mut RawColumnBuffer, value: &str) {

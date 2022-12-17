@@ -25,8 +25,7 @@ pub fn cmd_predict(pipeline: &RawPipeline, _output: Option<String>, input: Optio
     let mut exporter = FrameExporter::init(&pipeline, &frame)?;
     // read csv
     let mut rdr_iter = rdr.records();
-    while ! importer.eof {
-        let rows = importer.import_frame(&mut rdr_iter)?;
+    while let Some(rows) = importer.import_frame(&mut rdr_iter)? {
 
         // predict
         pipeline.transform(&frame, rows, false)?;
