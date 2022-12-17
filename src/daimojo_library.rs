@@ -13,7 +13,10 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use dlopen2::wrapper::{Container, WrapperApi};
 
 use crate::carray::{CArrayIterator, CTwinArrayIterator, pchar_to_cowstr};
+use crate::daimojo_library::pre_1587::{MojoOutputNamesIterator};
 use crate::error;
+
+mod pre_1587;
 
 #[allow(non_camel_case_types)]
 #[repr(C)]
@@ -248,6 +251,11 @@ impl<'a> RawPipeline<'a> {
             pipeline_ptr,
             model,
         })
+    }
+
+    pub fn output_names(&'a self) -> impl Iterator<Item=Cow<'a, str>> {
+        MojoOutputNamesIterator::new(self.lib, self.pipeline_ptr)
+            .map(pchar_to_cowstr)
     }
 
 /* TODO @1587
