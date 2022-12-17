@@ -8,6 +8,7 @@ use std::io::ErrorKind;
 use std::mem::transmute;
 use std::os::raw::c_char;
 use std::path::Path;
+use std::ptr::slice_from_raw_parts;
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 use dlopen2::wrapper::{Container, WrapperApi};
@@ -221,11 +222,11 @@ impl<'a> RawModel<'a> {
         }.map(pchar_to_cowstr)
     }
 
-    pub fn feature_types(&self) -> impl Iterator<Item=MOJO_DataType> {
+    pub fn feature_types(&self) -> &[MOJO_DataType] {
         unsafe {
             let ptr = (*self.model_ptr).feature_types;
             let count = (*self.model_ptr).feature_count;
-            CArrayIterator::new(ptr, count)
+            &*slice_from_raw_parts(ptr, count)
         }
     }
 }
