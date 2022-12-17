@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::process::ExitCode;
 use clap::{ArgAction, Parser, Subcommand};
 use log::LevelFilter;
-use daimojo::daimojo_library::{DaiMojoLibrary, MOJO_Transform_Flags, RawColumnMeta, MOJO_Transform_Flags_Type, RawModel, RawPipeline};
+use daimojo::daimojo_library::{DaiMojoLibrary, MOJO_Transform_Flags, RawColumnMeta, MOJO_Transform_Flags_Type, RawModel, RawPipeline, MOJO_DataType};
 
 /// CLI for daimojo libraries
 #[derive(Parser)]
@@ -99,15 +99,15 @@ fn show_pipeline(lib: &DaiMojoLibrary, mojo: &str) -> anyhow::Result<u8> {
     println!("* UUID: {}", model.uuid());
     println!("* Time created: {}", model.time_created_utc());
     println!("* Missing values: {}", model.missing_values().collect::<Vec<Cow<str>>>().join(", "));
-    let features = model.features_meta();
+    let features: Vec<(Cow<str>, MOJO_DataType)> = model.features().collect();
     println!("Input features[{}]:", features.len());
-    for RawColumnMeta { name, column_type} in features {
+    for (name, column_type) in features {
         println!("* '{name}': {column_type:?}");
     }
     let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as MOJO_Transform_Flags_Type)?; //TODO
-    let outputs = pipeline.outputs_meta();
+    let outputs: Vec<(Cow<str>, MOJO_DataType)> = pipeline.outputs().collect();
     println!("Output columns[{}]:", outputs.len());
-    for RawColumnMeta { name, column_type} in outputs {
+    for (name, column_type) in outputs {
         println!("* '{name}': {column_type:?}");
     }
     Ok(0)

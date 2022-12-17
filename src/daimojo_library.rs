@@ -262,7 +262,7 @@ impl<'a> RawPipeline<'a> {
         MojoOutputTypesIterator::new(self.lib, self.pipeline_ptr)
     }
 
-    pub fn features(&self) -> impl Iterator<Item=(Cow<'a, str>, MOJO_DataType)> {
+    pub fn outputs(&self) -> impl Iterator<Item=(Cow<'a, str>, MOJO_DataType)> {
         MojoOutputsIterator::new(self.lib, self.pipeline_ptr)
             .map(|(cname, ctype)| (pchar_to_cowstr(cname), ctype))
     }
@@ -445,9 +445,10 @@ impl<'a> RawColumnBuffer<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
     use std::path::Path;
 
-    use crate::daimojo_library::{MOJO_Transform_Flags, MOJO_Transform_Flags_Type, RawPipeline};
+    use crate::daimojo_library::{MOJO_DataType, MOJO_Transform_Flags, MOJO_Transform_Flags_Type, RawPipeline};
 
     use super::{DaiMojoLibrary, RawModel};
 
@@ -465,19 +466,19 @@ mod tests {
         println!("UUID: {}", model.uuid());
         println!("IsValid: {}", model.is_valid());
         println!("TimeCreated: {}", model.time_created_utc());
-        let missing_values = &model.missing_values();
+        let missing_values: Vec<Cow<str>> = model.missing_values().collect();
         println!("Missing values[{}]: {}", missing_values.len(), missing_values.join(", "));
-        let features = model.features_meta();
+        let features: Vec<(Cow<str>, MOJO_DataType)> = model.features().collect();
         println!("Features[{}]:", features.len());
-        for column in &features {
-            println!("* {} : {:?}", column.name, column.column_type);
+        for (name, column_type) in features {
+            println!("* {} : {:?}", name, column_type);
         }
         let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as MOJO_Transform_Flags_Type).unwrap();
         // outputs
-        let outputs = pipeline.outputs_meta();
+        let outputs: Vec<(Cow<str>, MOJO_DataType)> = pipeline.outputs().collect();
         println!("Outputs[{}]:", outputs.len());
-        for column in &outputs {
-            println!("* {} : {:?}", column.name, column.column_type);
+        for (name, column_type) in outputs {
+            println!("* {} : {:?}", name, column_type);
         }
         //
     }
