@@ -13,7 +13,7 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use dlopen2::wrapper::{Container, WrapperApi};
 
 use crate::carray::{CArrayIterator, CTwinArrayIterator, pchar_to_cowstr};
-use crate::daimojo_library::pre_1587::{MojoOutputNamesIterator};
+use crate::daimojo_library::pre_1587::{MojoOutputNamesIterator, MojoOutputsIterator, MojoOutputTypesIterator};
 use crate::error;
 
 mod pre_1587;
@@ -245,7 +245,7 @@ pub struct RawPipeline<'a> {
 
 impl<'a> RawPipeline<'a> {
     pub fn new(model: &'a RawModel, flags: MOJO_Transform_Flags_Type) -> error::Result<Self> {
-        let pipeline_ptr = unsafe { model.lib.api.MOJO_NewPipeline(model.model_ptr, flags)};
+        let pipeline_ptr = unsafe { model.lib.api.MOJO_NewPipeline(model.model_ptr, flags) };
         Ok(Self {
             lib: model.lib,
             pipeline_ptr,
@@ -256,6 +256,15 @@ impl<'a> RawPipeline<'a> {
     pub fn output_names(&'a self) -> impl Iterator<Item=Cow<'a, str>> {
         MojoOutputNamesIterator::new(self.lib, self.pipeline_ptr)
             .map(pchar_to_cowstr)
+    }
+
+    pub fn output_types(&self) -> MojoOutputTypesIterator<'a> {
+        MojoOutputTypesIterator::new(self.lib, self.pipeline_ptr)
+    }
+
+    pub fn features(&self) -> impl Iterator<Item=(Cow<'a, str>, MOJO_DataType)> {
+        MojoOutputsIterator::new(self.lib, self.pipeline_ptr)
+            .map(|(cname, ctype)| (pchar_to_cowstr(cname), ctype))
     }
 
 /* TODO @1587
