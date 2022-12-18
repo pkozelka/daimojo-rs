@@ -350,48 +350,60 @@ impl<'a> RawFrame<'a> {
         unsafe { self.lib.api.MOJO_FrameNcol(self.frame_ptr) }
     }
 
-    pub unsafe fn input_data(&self, index: usize) -> *mut u8 {
-        unsafe {
-            self.lib.api.MOJO_Input_Data(self.pipeline_ptr, self.frame_ptr, index)
+    unsafe fn input_data(&self, feature_index: usize) -> Option<*mut u8> {
+        let model = (*self.pipeline_ptr).model;
+        if feature_index < (*model).feature_count {
+            Some(self.lib.api.MOJO_Input_Data(self.pipeline_ptr, self.frame_ptr, feature_index))
+        } else {
+            None
         }
     }
 
-    pub fn input_col(&self, feature_index: usize) -> RawColumnBuffer {
-        let ptr = unsafe { self.input_data(feature_index) }; //.expect(&format!("No buffer for input column '{}'", col.name));
-        let data_type = unsafe {
+    unsafe fn output_data(&self, output_index: usize) -> Option<*const u8> {
+        if output_index < (*self.pipeline_ptr).output_count {
+            Some(self.lib.api.MOJO_Output_Data(self.pipeline_ptr, self.frame_ptr, output_index))
+        } else {
+            None
+        }
+    }
+
+    pub fn input_col(&self, feature_index: usize) -> error::Result<RawColumnBuffer> {
+        unsafe {
             let model = (*self.pipeline_ptr).model;
-            (*model).feature_types.offset(feature_index as isize).read()
-        };
-        RawColumnBuffer::new(self.lib, data_type, ptr)
-    }
+            let data_type = (*model).feature_types.offset(feature_index as isize).read();
+            match self.input_data(feature_index) {
+                None => Err(error::MojoError::InvalidInputIndex(feature_index)),
+                Some(ptr) => Ok(RawColumnBuffer::new(self.lib, data_type, ptr))
+            }
 
-    pub unsafe fn output_data(&self, index: usize) -> *const u8 {
-        unsafe {
-            self.lib.api.MOJO_Output_Data(self.pipeline_ptr, self.frame_ptr, index)
         }
     }
 
-    pub fn output_col(&self, output_index: usize) -> RawColumnBuffer {
-        let ptr = unsafe { self.output_data(output_index) }; //.expect(&format!("No buffer for input column '{}'", col.name));
-        let data_type = unsafe {
-            self.lib.api.MOJO_Output_Type(self.pipeline_ptr, output_index)
-            // (*self.pipeline_ptr).output_types.offset(output_index as isize).read()
-        };
-        RawColumnBuffer::new(self.lib, data_type, ptr)
+    pub fn output_col(&self, output_index: usize) -> error::Result<RawColumnBuffer> {
+        unsafe {
+            let data_type = self.lib.api.MOJO_Output_Type(self.pipeline_ptr, output_index);
+            //1587: (*self.pipeline_ptr).output_types.offset(output_index as isize).read()
+            match self.output_data(output_index) {
+                None => Err(error::MojoError::InvalidOutputIndex(output_index)),
+                Some(ptr) => Ok(RawColumnBuffer::new(self.lib, data_type, ptr)),
+            }
+        }
     }
 
-    pub fn input_f32_mut(&mut self, index: usize) -> Option<&mut [f32]> {
-        Some(unsafe {
-            let data = self.input_data(index);
-            std::slice::from_raw_parts_mut(transmute(data), self.nrow)
-        })
+    pub fn input_f32_mut(&mut self, feature_index: usize) -> error::Result<&mut [f32]> {
+        unsafe {
+            let data = self.input_data(feature_index)
+                .ok_or(error::MojoError::InvalidInputIndex(feature_index))?;
+            Ok(std::slice::from_raw_parts_mut(transmute(data), self.nrow))
+        }
     }
 
-    pub fn output_f32(&self, index: usize) -> Option<&[f32]> {
-        Some(unsafe {
-            let data = self.output_data(index);
-            std::slice::from_raw_parts(transmute(data), self.nrow)
-        })
+    pub fn output_f32(&self, output_index: usize) -> error::Result<&[f32]> {
+        unsafe {
+            let data = self.output_data(output_index)
+                .ok_or(error::MojoError::InvalidOutputIndex(output_index))?;
+            Ok(std::slice::from_raw_parts(transmute(data), self.nrow))
+        }
     }
 }
 

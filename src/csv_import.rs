@@ -1,6 +1,7 @@
 use std::io::ErrorKind;
 use std::collections::HashMap;
 use crate::daimojo_library::{MOJO_DataType, RawColumnBuffer, RawFrame, RawPipeline};
+use crate::error;
 
 const MOJO_I32_NAN: i32 = i32::MAX;
 const MOJO_I64_NAN: i64 = i64::MAX;
@@ -13,10 +14,10 @@ pub struct FrameImporter<'a> {
 }
 
 impl<'a> FrameImporter<'a> {
-    pub fn init(pipeline: &RawPipeline, frame: &'a RawFrame, rdr: &mut csv::Reader<std::fs::File>) -> std::io::Result<Self> {
+    pub fn init(pipeline: &RawPipeline, frame: &'a RawFrame, rdr: &mut csv::Reader<std::fs::File>) -> error::Result<Self> {
         let model = pipeline.model;
         let csv_headers = match rdr.byte_headers() {
-            Err(e) => return Err(std::io::Error::new(ErrorKind::InvalidData, format!("Cannot read header: {e}"))),
+            Err(e) => Err(std::io::Error::new(ErrorKind::InvalidData, format!("Cannot read header: {e}")))?,
             Ok(headers) => headers,
         };
         let csv_headers: HashMap<&[u8], usize> = csv_headers.iter().enumerate()
@@ -28,7 +29,7 @@ impl<'a> FrameImporter<'a> {
             let name = name.to_bytes();
             if let Some(&csv_index) = csv_headers.get(name) {
                 // println!("Rust: input_data({index}='{}') -> {:X}", col.name, ptr as usize);
-                icols.push(frame.input_col(index));
+                icols.push(frame.input_col(index)?);
                 csv_indices.push(csv_index);
             }
         }

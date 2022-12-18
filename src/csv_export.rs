@@ -1,6 +1,7 @@
 use csv::Writer;
 use std::io::Stdout;
 use crate::daimojo_library::{MOJO_DataType, RawColumnBuffer, RawFrame, RawPipeline};
+use crate::error;
 
 pub struct FrameExporter<'a> {
     pub saved_batches: usize,
@@ -10,13 +11,13 @@ pub struct FrameExporter<'a> {
 }
 
 impl<'a> FrameExporter<'a> {
-    pub fn init(pipeline: &RawPipeline, frame: &'a RawFrame) -> std::io::Result<Self> {
+    pub fn init(pipeline: &RawPipeline, frame: &'a RawFrame) -> error::Result<Self> {
         let mut wtr = csv::Writer::from_writer(std::io::stdout());
         let mut ocols = Vec::new();
         for (index, name) in pipeline.output_names().enumerate() {
             wtr.write_field(&name.as_ref())?;
             // println!("Rust: output_data({index}='{}') -> {:X}", col.name, ptr as usize);
-            ocols.push(frame.output_col(index));
+            ocols.push(frame.output_col(index)?);
         }
         wtr.write_record(None::<&[u8]>)?;
         wtr.flush()?;

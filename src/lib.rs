@@ -30,17 +30,17 @@ mod tests {
         let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as MOJO_Transform_Flags_Type)?;
         let mut frame = RawFrame::new(&pipeline, 1)?;
         // fill input columns
-        frame.input_f32_mut(0, /*"sepal_len"*/).unwrap()[0] = 5.1;
-        frame.input_f32_mut(1, /*"sepal_wid"*/).unwrap()[0] = 3.5;
-        frame.input_f32_mut(2, /*"petal_len"*/).unwrap()[0] = 1.4;
-        frame.input_f32_mut(3, /*"petal_wid"*/).unwrap()[0] = 0.2;
+        frame.input_f32_mut(0, /*"sepal_len"*/)?[0] = 5.1;
+        frame.input_f32_mut(1, /*"sepal_wid"*/)?[0] = 3.5;
+        frame.input_f32_mut(2, /*"petal_len"*/)?[0] = 1.4;
+        frame.input_f32_mut(3, /*"petal_wid"*/)?[0] = 0.2;
         log::trace!("ncol before predict: {}", frame.ncol());
-        pipeline.transform(&mut frame, 1, false).unwrap();
+        pipeline.transform(&mut frame, 1, false)?;
         log::trace!("ncol after predict: {}", frame.ncol());
         // present output columns
-        let setosa = frame.output_f32(0).unwrap()[0];
-        let versicolor = frame.output_f32(1).unwrap()[0];
-        let virginica = frame.output_f32(2).unwrap()[0];
+        let setosa     = frame.output_f32(0)?[0];
+        let versicolor = frame.output_f32(1)?[0];
+        let virginica  = frame.output_f32(2)?[0];
         println!("Result: {} {} {}", setosa, versicolor, virginica);
         assert_eq!(setosa, 0.43090245);
         assert_eq!(versicolor, 0.28463825583457947);
@@ -66,6 +66,7 @@ mod tests {
         fixed_acidity[2] = 6.4;
         fixed_acidity[3] = 8.6;
         fixed_acidity[4] = 7.3;
+        // fixed_acidity.copy_from_slice(&[11.8, 7.2, 6.4, 8.6, 7.3]); // alternative way to fill it
         log::trace!("ncol before predict: {}", frame.ncol());
         pipeline.transform(&mut frame, 5, true).unwrap();
         log::trace!("ncol after predict: {}", frame.ncol());
