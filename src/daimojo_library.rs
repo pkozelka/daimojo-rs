@@ -215,6 +215,16 @@ impl<'a> RawModel<'a> {
             .collect()
     }
 
+/*
+    pub fn feature_names(&'a self) -> &[&CStr] {
+        unsafe {
+            let ptr = (*self.model_ptr).feature_names;
+            let ptr = transmute(ptr); // TODO THIS DOES NOT WORK - WHY? because CStr is a slice but we need pointer
+            let count = (*self.model_ptr).feature_count;
+            &*slice_from_raw_parts(ptr, count)
+        }
+    }
+*/
     pub fn feature_names_iter(&'a self) -> impl Iterator<Item=&CStr> {
         unsafe {
             let ptr = (*self.model_ptr).feature_names;
