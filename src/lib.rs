@@ -25,7 +25,7 @@ mod tests {
         let version = lib.version();
         println!("Library version: {version}");
         let model = RawModel::load(&lib, "data/iris/pipeline.mojo", "")?;
-        println!("Pipeline UUID: {}", model.uuid());
+        println!("Pipeline UUID: {}", model.uuid().to_string_lossy());
         println!("Time created: {}", model.time_created_utc());
         let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as MOJO_Transform_Flags_Type)?;
         let mut frame = RawFrame::new(&pipeline, 1)?;
@@ -55,7 +55,7 @@ mod tests {
         println!("Library version: {version}");
 
         let model = RawModel::load(&lib, "data/wine/pipeline.mojo", "")?;
-        println!("Pipeline UUID: {}", model.uuid());
+        println!("Pipeline UUID: {}", model.uuid().to_string_lossy());
         println!("Time created: {}", model.time_created_utc());
         let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as MOJO_Transform_Flags_Type)?;
         let mut frame = RawFrame::new(&pipeline, 5)?;

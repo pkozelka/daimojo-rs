@@ -477,7 +477,7 @@ mod tests {
 
         let model = RawModel::load(&lib, "../mojo2/data/iris/pipeline.mojo", ".").unwrap();
 
-        println!("UUID: {}", model.uuid());
+        println!("UUID: {}", model.uuid().to_string_lossy());
         println!("IsValid: {}", model.is_valid());
         println!("TimeCreated: {}", model.time_created_utc());
         let missing_values: Vec<Cow<str>> = model.missing_values()
