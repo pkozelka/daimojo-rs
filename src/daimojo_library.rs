@@ -181,11 +181,7 @@ impl<'a> RawModel<'a> {
         unsafe { (*self.model_ptr).is_valid }
     }
 
-    pub fn uuid(&self) -> Cow<str> {
-        pchar_to_cowstr(unsafe { (*self.model_ptr).uuid })
-    }
-
-    pub fn uuid_c(&self) -> &CStr {
+    pub fn uuid(&self) -> &CStr {
         unsafe { CStr::from_ptr((*self.model_ptr).uuid) }
     }
 
@@ -219,12 +215,13 @@ impl<'a> RawModel<'a> {
             .collect()
     }
 
-    pub fn feature_names(&'a self) -> impl Iterator<Item=Cow<'a, str>> {
+    pub fn feature_names_iter(&'a self) -> impl Iterator<Item=&CStr> {
         unsafe {
             let ptr = (*self.model_ptr).feature_names;
             let count = (*self.model_ptr).feature_count;
             CArrayIterator::new(ptr, count)
-        }.map(pchar_to_cowstr)
+                .map(|s| CStr::from_ptr(s))
+        }
     }
 
     pub fn feature_types(&self) -> &[MOJO_DataType] {

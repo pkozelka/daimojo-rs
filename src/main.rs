@@ -97,7 +97,7 @@ fn run() -> anyhow::Result<u8> {
 
 fn show_pipeline(lib: &DaiMojoLibrary, mojo: &str) -> anyhow::Result<u8> {
     let model = load_model(lib, mojo)?;
-    println!("* UUID: {}", model.uuid());
+    println!("* UUID: {}", model.uuid().to_string_lossy());
     println!("* Time created: {}", model.time_created_utc());
     let missing_values: Vec<Cow<str>> = model.missing_values()
         .map(CStr::to_string_lossy)
