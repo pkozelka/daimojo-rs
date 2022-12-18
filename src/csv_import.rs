@@ -15,18 +15,18 @@ pub struct FrameImporter<'a> {
 impl<'a> FrameImporter<'a> {
     pub fn init(pipeline: &RawPipeline, frame: &'a RawFrame, rdr: &mut csv::Reader<std::fs::File>) -> std::io::Result<Self> {
         let model = pipeline.model;
-        let csv_headers = match rdr.headers() {
+        let csv_headers = match rdr.byte_headers() {
             Err(e) => return Err(std::io::Error::new(ErrorKind::InvalidData, format!("Cannot read header: {e}"))),
             Ok(headers) => headers,
         };
-        let csv_headers: HashMap<&str, usize> = csv_headers.iter().enumerate()
+        let csv_headers: HashMap<&[u8], usize> = csv_headers.iter().enumerate()
             .map(|(csv_index, col_name)| (col_name, csv_index))
             .collect();
         let mut icols = Vec::new();
         let mut csv_indices = Vec::new();
         for (index, name) in model.feature_names_iter().enumerate() {
-            let name = name.to_string_lossy();
-            if let Some(&csv_index) = csv_headers.get(name.as_ref()) {
+            let name = name.to_bytes();
+            if let Some(&csv_index) = csv_headers.get(name) {
                 // println!("Rust: input_data({index}='{}') -> {:X}", col.name, ptr as usize);
                 icols.push(frame.input_col(index));
                 csv_indices.push(csv_index);
