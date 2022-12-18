@@ -1,10 +1,11 @@
 extern crate core;
 
 use std::borrow::Cow;
+use std::ffi::CStr;
 use std::process::ExitCode;
 use clap::{ArgAction, Parser, Subcommand};
 use log::LevelFilter;
-use daimojo::daimojo_library::{DaiMojoLibrary, MOJO_Transform_Flags, RawColumnMeta, MOJO_Transform_Flags_Type, RawModel, RawPipeline, MOJO_DataType};
+use daimojo::daimojo_library::{DaiMojoLibrary, MOJO_Transform_Flags, MOJO_Transform_Flags_Type, RawModel, RawPipeline, MOJO_DataType};
 
 /// CLI for daimojo libraries
 #[derive(Parser)]
@@ -98,7 +99,10 @@ fn show_pipeline(lib: &DaiMojoLibrary, mojo: &str) -> anyhow::Result<u8> {
     let model = load_model(lib, mojo)?;
     println!("* UUID: {}", model.uuid());
     println!("* Time created: {}", model.time_created_utc());
-    println!("* Missing values: {}", model.missing_values().collect::<Vec<Cow<str>>>().join(", "));
+    let missing_values: Vec<Cow<str>> = model.missing_values()
+        .map(CStr::to_string_lossy)
+        .collect();
+    println!("* Missing values[{}]: {}", missing_values.len(), missing_values.join(", "));
     let features: Vec<(Cow<str>, MOJO_DataType)> = model.features().collect();
     println!("Input features[{}]:", features.len());
     for (name, column_type) in features {

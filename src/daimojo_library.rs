@@ -185,18 +185,23 @@ impl<'a> RawModel<'a> {
         pchar_to_cowstr(unsafe { (*self.model_ptr).uuid })
     }
 
+    pub fn uuid_c(&self) -> &CStr {
+        unsafe { CStr::from_ptr((*self.model_ptr).uuid) }
+    }
+
     pub fn time_created_utc(&self) -> DateTime<Utc> {
         let time_created = unsafe { (*self.model_ptr).time_created };
         let n = NaiveDateTime::from_timestamp_opt(time_created as i64, 0).unwrap();
         DateTime::from_utc(n, Utc)
     }
 
-    pub fn missing_values(&self) -> impl Iterator<Item=Cow<'a, str>> {
+    pub fn missing_values(&self) -> impl Iterator<Item=&CStr> {
         unsafe {
             let ptr = (*self.model_ptr).missing_values;
             let count = (*self.model_ptr).missing_values_count;
             CArrayIterator::new(ptr, count)
-        }.map(pchar_to_cowstr)
+                .map(|s| CStr::from_ptr(s))
+        }
     }
 
     pub fn features(&self) -> impl Iterator<Item=(Cow<'a, str>, MOJO_DataType)> {
@@ -447,6 +452,7 @@ impl<'a> RawColumnBuffer<'a> {
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+    use std::ffi::CStr;
     use std::path::Path;
 
     use crate::daimojo_library::{MOJO_DataType, MOJO_Transform_Flags, MOJO_Transform_Flags_Type, RawPipeline};
@@ -467,7 +473,9 @@ mod tests {
         println!("UUID: {}", model.uuid());
         println!("IsValid: {}", model.is_valid());
         println!("TimeCreated: {}", model.time_created_utc());
-        let missing_values: Vec<Cow<str>> = model.missing_values().collect();
+        let missing_values: Vec<Cow<str>> = model.missing_values()
+            .map(CStr::to_string_lossy)
+            .collect();
         println!("Missing values[{}]: {}", missing_values.len(), missing_values.join(", "));
         let features: Vec<(Cow<str>, MOJO_DataType)> = model.features().collect();
         println!("Features[{}]:", features.len());

@@ -3,8 +3,8 @@ use std::io::Stdout;
 use crate::daimojo_library::{MOJO_DataType, RawColumnBuffer, RawFrame, RawPipeline};
 
 pub struct FrameExporter<'a> {
-    saved_batches: usize,
-    saved_rows: usize,
+    pub saved_batches: usize,
+    pub saved_rows: usize,
     wtr: Writer<Stdout>,
     ocols: Vec<RawColumnBuffer<'a>>,
 }
