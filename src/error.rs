@@ -15,6 +15,8 @@ pub enum MojoError {
     InvalidPipeline,
     #[error("Null Error")]
     NulError(#[from] NulError),
+    #[error("Missing input column: {0}")]
+    MissingInputColumn(usize),
     #[error("invalid index of input column: {0}")]
     InvalidInputIndex(usize),
     #[error("invalid index of output column: {0}")]

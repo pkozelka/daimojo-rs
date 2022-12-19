@@ -1,7 +1,7 @@
 use std::io::ErrorKind;
 use std::collections::HashMap;
 use crate::daimojo_library::{MOJO_DataType, MOJO_INT32_NAN, MOJO_INT64_NAN, RawColumnBuffer, RawFrame, RawPipeline};
-use crate::error;
+use crate::{error, MojoError};
 
 pub struct FrameImporter<'a> {
     icols: Vec<RawColumnBuffer<'a>>,
@@ -22,13 +22,19 @@ impl<'a> FrameImporter<'a> {
             .collect();
         let mut icols = Vec::new();
         let mut csv_indices = Vec::new();
+        let mut missing_data = None;
         for (index, name) in model.feature_names_iter().enumerate() {
-            let name = name.to_bytes();
-            if let Some(&csv_index) = csv_headers.get(name) {
+            if let Some(&csv_index) = csv_headers.get(name.to_bytes()) {
                 // println!("Rust: input_data({index}='{}') -> {:X}", col.name, ptr as usize);
                 icols.push(frame.input_col(index)?);
                 csv_indices.push(csv_index);
+            } else {
+                log::error!("Unknown input column name: {}", name.to_string_lossy());
+                missing_data = Some(index);
             }
+        }
+        if let Some(index) = missing_data {
+            return Err(MojoError::InvalidInputIndex(index));
         }
         Ok(Self {
             icols,
