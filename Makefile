@@ -20,3 +20,6 @@ info-wine:
 
 test-str:
 	cargo run -- --mojo data/fillna_str/pipeline.mojo predict data/fillna_str/example.csv
+
+test-simple:
+	cargo run -- -vvv --mojo tests/data/transform_agg_sum_py.mojo predict tests/data/transform_agg_sum_py.input.csv

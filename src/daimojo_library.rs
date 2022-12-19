@@ -36,6 +36,9 @@ pub struct MOJO_Model {
     feature_types: *const MOJO_DataType,
 }
 
+pub const MOJO_INT32_NAN: i32 = i32::MAX;
+pub const MOJO_INT64_NAN: i64 = i64::MAX;
+
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct MOJO_Pipeline {
@@ -52,7 +55,7 @@ pub struct MOJO_Frame {}
 #[allow(dead_code)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
-#[derive(Copy,Clone,Debug)]
+#[derive(Copy,Clone,Debug,Eq,PartialEq)]
 pub enum MOJO_DataType {
     MOJO_UNKNOWN = 0,
     /// [i8] byte-represented boolean, 0=false, 1=true, NA is not defined

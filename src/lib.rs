@@ -2,7 +2,7 @@
 
 pub use csv_export::FrameExporter;
 pub use csv_import::FrameImporter;
-pub use daimojo_library::{DaiMojoLibrary, MOJO_DataType, MOJO_Transform_Flags, MOJO_Transform_Flags_Type};
+pub use daimojo_library::{DaiMojoLibrary, MOJO_DataType, MOJO_Transform_Flags, MOJO_Transform_Flags_Type, MOJO_INT32_NAN, MOJO_INT64_NAN};
 pub use daimojo_library::{RawFrame, RawModel, RawPipeline};
 pub use error::{MojoError, Result};
 

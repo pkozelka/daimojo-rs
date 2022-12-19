@@ -1,10 +1,7 @@
 use std::io::ErrorKind;
 use std::collections::HashMap;
-use crate::daimojo_library::{MOJO_DataType, RawColumnBuffer, RawFrame, RawPipeline};
+use crate::daimojo_library::{MOJO_DataType, MOJO_INT32_NAN, MOJO_INT64_NAN, RawColumnBuffer, RawFrame, RawPipeline};
 use crate::error;
-
-const MOJO_I32_NAN: i32 = i32::MAX;
-const MOJO_I64_NAN: i64 = i64::MAX;
 
 pub struct FrameImporter<'a> {
     icols: Vec<RawColumnBuffer<'a>>,
@@ -81,11 +78,12 @@ impl<'a> FrameImporter<'a> {
                 col.unchecked_write_next(value);
             }
             MOJO_DataType::MOJO_INT32 => {
-                let value = value.parse::<i32>().unwrap_or(MOJO_I32_NAN);
+                //TODO: if the string has decimal places, parse it and change to int
+                let value = value.parse::<i32>().unwrap_or(MOJO_INT32_NAN);
                 col.unchecked_write_next(value);
             }
             MOJO_DataType::MOJO_INT64 => {
-                let value = value.parse::<i64>().unwrap_or(MOJO_I64_NAN);
+                let value = value.parse::<i64>().unwrap_or(MOJO_INT64_NAN);
                 col.unchecked_write_next(value);
             }
             MOJO_DataType::MOJO_STRING => {
