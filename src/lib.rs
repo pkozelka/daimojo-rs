@@ -1,10 +1,12 @@
 //! Convenient abstraction for daimojo interface
 
-
-pub use error::{MojoError,Result};
-pub use csv_import::FrameImporter;
 pub use csv_export::FrameExporter;
-pub mod daimojo_library;
+pub use csv_import::FrameImporter;
+pub use daimojo_library::{DaiMojoLibrary, MOJO_DataType, MOJO_Transform_Flags, MOJO_Transform_Flags_Type};
+pub use daimojo_library::{RawFrame, RawModel, RawPipeline};
+pub use error::{MojoError, Result};
+
+mod daimojo_library;
 mod carray;
 mod csv_import;
 mod csv_export;
@@ -13,6 +15,7 @@ mod error;
 #[cfg(test)]
 mod tests {
     use std::path::Path;
+
     use crate::daimojo_library::{DaiMojoLibrary, MOJO_Transform_Flags, MOJO_Transform_Flags_Type, RawFrame, RawModel, RawPipeline};
     use crate::error;
 

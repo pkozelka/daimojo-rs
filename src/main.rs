@@ -5,7 +5,7 @@ use std::ffi::CStr;
 use std::process::ExitCode;
 use clap::{ArgAction, Parser, Subcommand};
 use log::LevelFilter;
-use daimojo::daimojo_library::{DaiMojoLibrary, MOJO_Transform_Flags, MOJO_Transform_Flags_Type, RawModel, RawPipeline, MOJO_DataType};
+use daimojo::{DaiMojoLibrary, MOJO_Transform_Flags, MOJO_Transform_Flags_Type, RawModel, RawPipeline, MOJO_DataType};
 
 /// CLI for daimojo libraries
 #[derive(Parser)]

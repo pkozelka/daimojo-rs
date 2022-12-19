@@ -1,6 +1,6 @@
 use daimojo::FrameExporter;
 use daimojo::FrameImporter;
-use daimojo::daimojo_library::{RawFrame, RawPipeline};
+use daimojo::{RawFrame, RawPipeline};
 
 //TODO missing features:
 // - various CSV in/out flags
@@ -52,43 +52,4 @@ fn batch_size_magic(input: &Option<String>, batch_size: usize) -> std::io::Resul
         }
         (batch_size, _) => batch_size,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::cmd_predict::{unchecked_read_next, unchecked_write_next};
-
-    #[test]
-    fn test_readptr() {
-        let a: [f32;4] = [7.0,11.0,13.0,17.0];
-        let mut p= a.as_ptr() as *mut u8;
-        let next = unchecked_read_next::<f32>(&mut p);
-        println!("A[0]: {}", next);
-        assert_eq!(7.0, next);
-        let next = unchecked_read_next::<f32>(&mut p);
-        println!("A[1]: {}", next);
-        assert_eq!(11.0, next);
-        let next = unchecked_read_next::<f32>(&mut p);
-        println!("A[2]: {}", next);
-        assert_eq!(13.0, next);
-        let next = unchecked_read_next::<f32>(&mut p);
-        println!("A[3]: {}", next);
-        assert_eq!(17.0, next);
-    }
-
-    #[test]
-    fn test_writeptr() {
-        let a: [f32;4] = [7.0,11.0,13.0,17.0];
-        let mut p= a.as_ptr() as *mut u8;
-        unchecked_write_next::<f32>(&mut p, 1.2);
-        unchecked_write_next::<f32>(&mut p, 3.4);
-        unchecked_write_next::<f32>(&mut p, 5.6);
-        unchecked_write_next::<f32>(&mut p, 7.8);
-        let s = a.iter().map(|v|format!("{v}")).collect::<Vec<String>>();
-        let s = s.join(",");
-        println!("{s}");
-        assert_eq!(1.2,a[0]);
-        assert_eq!(7.8,a[3]);
-    }
-
 }

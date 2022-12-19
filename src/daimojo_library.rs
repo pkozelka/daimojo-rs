@@ -49,12 +49,6 @@ pub struct MOJO_Pipeline {
 #[allow(non_camel_case_types)]
 pub struct MOJO_Frame {}
 
-#[allow(non_camel_case_types)]
-pub struct MOJO_Col {}
-
-/// An alias for array of C strings (`char **`)
-pub type PCharArray = *const *const c_char;
-
 #[allow(dead_code)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
@@ -151,11 +145,6 @@ impl DaiMojoLibrary {
     }
 }
 
-pub struct RawColumnMeta<'a> {
-    pub name: Cow<'a, str>,
-    pub column_type: MOJO_DataType,
-}
-
 pub struct RawModel<'a> {
     lib: &'a DaiMojoLibrary,
     model_ptr: *const MOJO_Model,
@@ -209,28 +198,17 @@ impl<'a> RawModel<'a> {
         }.map(|(cname, ctype)| (pchar_to_cowstr(cname), ctype))
     }
 
-    pub fn features_meta(&self) -> Vec<RawColumnMeta<'a>> {
-        self.features()
-            .map(|(name,column_type)| RawColumnMeta { name, column_type })
-            .collect()
-    }
-
-/*
-    pub fn feature_names(&'a self) -> &[&CStr] {
+    pub unsafe fn feature_names(&'a self) -> &[*const c_char] {
         unsafe {
             let ptr = (*self.model_ptr).feature_names;
-            let ptr = transmute(ptr); // TODO THIS DOES NOT WORK - WHY? because CStr is a slice but we need pointer
             let count = (*self.model_ptr).feature_count;
             &*slice_from_raw_parts(ptr, count)
         }
     }
-*/
     pub fn feature_names_iter(&'a self) -> impl Iterator<Item=&CStr> {
         unsafe {
-            let ptr = (*self.model_ptr).feature_names;
-            let count = (*self.model_ptr).feature_count;
-            CArrayIterator::new(ptr, count)
-                .map(|s| CStr::from_ptr(s))
+            self.feature_names().iter()
+                .map(|&s| CStr::from_ptr(s))
         }
     }
 
@@ -299,19 +277,6 @@ impl<'a> RawPipeline<'a> {
         }
     }
 */
-    pub fn outputs_meta(&self) -> Vec<RawColumnMeta<'a>> {
-        unsafe {
-            let count = (*self.pipeline_ptr).output_count;
-            let mut columns = Vec::with_capacity(count);
-            for i in 0..count {
-                let cname = self.lib.api.MOJO_Output_Name(self.pipeline_ptr, i);
-                let cname = CStr::from_ptr(cname).to_string_lossy();
-                let ctype = self.lib.api.MOJO_Output_Type(self.pipeline_ptr, i);
-                columns.push(RawColumnMeta { name: cname, column_type: ctype });
-            }
-            columns
-        }
-    }
 
     pub fn transform(&self, frame: &RawFrame, nrow: usize, debug: bool) -> error::Result<()> {
         unsafe {
