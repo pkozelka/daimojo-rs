@@ -14,18 +14,15 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use dlopen2::wrapper::{Container, WrapperApi};
 
 use crate::carray::{CArrayIterator, CTwinArrayIterator, pchar_to_cowstr};
-use crate::daimojo_library::pre_1587::{MojoOutputNamesIterator, MojoOutputsIterator, MojoOutputTypesIterator};
 use crate::error;
-
-mod pre_1587;
 
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct MOJO_Model {
-    //1589: capabilities: MOJO_Transform_Flags_Type,
+    supported_ops: MOJO_Transform_Operations_Type,
     is_valid: bool,
     uuid: *const c_char,
-    //1590: dai_version: *const c_char,
+    dai_version: *const c_char,
     //? experiment_id: *const c_char,
     //? experiment_name: *const c_char,
     time_created: u64,
@@ -43,10 +40,10 @@ pub const MOJO_INT64_NAN: i64 = i64::MAX;
 #[repr(C)]
 pub struct MOJO_Pipeline {
     model: *const MOJO_Model,
-    flags: MOJO_Transform_Flags_Type,
+    flags: MOJO_Transform_Operations_Type,
     output_count: usize,
-    //1587: output_names: *const *const c_char,
-    //1587: output_types: *const MOJO_DataType,
+    output_names: *const *const c_char,
+    output_types: *const MOJO_DataType,
 }
 
 #[allow(non_camel_case_types)]
@@ -73,12 +70,12 @@ pub enum MOJO_DataType {
 }
 
 #[allow(non_camel_case_types)]
-pub type MOJO_Transform_Flags_Type = u32;
+pub type MOJO_Transform_Operations_Type = u64;
 
 #[allow(non_camel_case_types)]
 #[repr(C)]
 #[derive(Copy,Clone,Debug)]
-pub enum MOJO_Transform_Flags {
+pub enum MOJO_Transform_Operations {
     /// normal prediction
     PREDICT = 1 << 0,
     /// prediction interval
@@ -101,13 +98,9 @@ pub struct DaiMojoBindings {
     MOJO_NewModel: unsafe extern "C" fn(filename: *const c_char, tf_lib_prefix: *const c_char) -> *const MOJO_Model,
     MOJO_DeleteModel: unsafe extern "C" fn(mojo_model: *const MOJO_Model),
     // Pipeline
-    MOJO_NewPipeline: unsafe extern "C" fn(mojo_model: *const MOJO_Model, flags: MOJO_Transform_Flags_Type) -> *const MOJO_Pipeline,
+    MOJO_NewPipeline: unsafe extern "C" fn(mojo_model: *const MOJO_Model, flags: MOJO_Transform_Operations_Type) -> *const MOJO_Pipeline,
     MOJO_DeletePipeline: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline),
     MOJO_Transform: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, frame: *const MOJO_Frame, nrow: usize, debug: bool),
-    /*?for now?1587*/
-    MOJO_Output_Name: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, index: usize) -> *const c_char,
-    /*?for now?1587*/
-    MOJO_Output_Type: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, index: usize) -> MOJO_DataType,
     // Frame
     MOJO_Pipeline_NewFrame: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, nrow: usize) -> *const MOJO_Frame,
     MOJO_DeleteFrame: unsafe extern "C" fn(frame: *const MOJO_Frame),
@@ -177,6 +170,17 @@ impl<'a> RawModel<'a> {
         unsafe { CStr::from_ptr((*self.model_ptr).uuid) }
     }
 
+    pub fn dai_version(&self) -> &CStr {
+        unsafe {
+            const EMPTY_CSTR: *const c_char = b"?\0".as_ptr().cast();
+            let ptr = (*self.model_ptr).dai_version;
+            if ptr.is_null() {
+                log::error!("DAI version is null!");
+                return CStr::from_ptr(EMPTY_CSTR);
+            }
+            CStr::from_ptr(ptr) }
+    }
+
     pub fn time_created_utc(&self) -> DateTime<Utc> {
         let time_created = unsafe { (*self.model_ptr).time_created };
         let n = NaiveDateTime::from_timestamp_opt(time_created as i64, 0).unwrap();
@@ -238,7 +242,7 @@ pub struct RawPipeline<'a> {
 }
 
 impl<'a> RawPipeline<'a> {
-    pub fn new(model: &'a RawModel, flags: MOJO_Transform_Flags_Type) -> error::Result<Self> {
+    pub fn new(model: &'a RawModel, flags: MOJO_Transform_Operations_Type) -> error::Result<Self> {
         let pipeline_ptr = unsafe { model.lib.api.MOJO_NewPipeline(model.model_ptr, flags) };
         Ok(Self {
             lib: model.lib,
@@ -247,39 +251,36 @@ impl<'a> RawPipeline<'a> {
         })
     }
 
-    pub fn output_names(&'a self) -> impl Iterator<Item=Cow<'a, str>> {
-        MojoOutputNamesIterator::new(self.lib, self.pipeline_ptr)
-            .map(pchar_to_cowstr)
+    pub fn output_names(&'a self) -> &[*const c_char] {
+        unsafe {
+            let ptr = (*self.pipeline_ptr).output_names;
+            let count = (*self.pipeline_ptr).output_count;
+            &*slice_from_raw_parts(ptr, count)
+        }
     }
 
-    pub fn output_types(&self) -> MojoOutputTypesIterator<'a> {
-        MojoOutputTypesIterator::new(self.lib, self.pipeline_ptr)
+    pub fn output_types(&self) -> &[MOJO_DataType] {
+        unsafe {
+            let ptr = (*self.pipeline_ptr).output_types;
+            let count = (*self.pipeline_ptr).output_count;
+            &*slice_from_raw_parts(ptr, count)
+        }
+    }
+    pub fn output_names_iter(&'a self) -> impl Iterator<Item=&CStr> {
+        unsafe {
+            self.output_names().iter()
+                .map(|&s| CStr::from_ptr(s))
+        }
     }
 
     pub fn outputs(&self) -> impl Iterator<Item=(Cow<'a, str>, MOJO_DataType)> {
-        MojoOutputsIterator::new(self.lib, self.pipeline_ptr)
-            .map(|(cname, ctype)| (pchar_to_cowstr(cname), ctype))
-    }
-
-/* TODO @1587
-    pub fn output_names(&'a self) -> impl Iterator<Item=Cow<'a, str>> {
         unsafe {
-            // let model = (*self.model_ptr).feature_names;
-            let ptr = (*self.pipeline_ptr).feature_names;
-            let count = (*self.pipeline_ptr).feature_count;
-            CArrayIterator { ptr, count }
-        }.map(pchar_to_cowstr)
+            let count = (*self.pipeline_ptr).output_count;
+            let pname = (*self.pipeline_ptr).output_names;
+            let ptype = (*self.pipeline_ptr).output_types;
+            CTwinArrayIterator::new(count, pname, ptype)
+        }.map(|(cname, ctype)| (pchar_to_cowstr(cname), ctype))
     }
-
-    pub fn output_types(&self) -> impl Iterator<Item=MOJO_DataType> {
-        unsafe {
-            // let model = (*self.model_ptr).feature_names;
-            let ptr = (*self.model_ptr).feature_types;
-            let count = (*self.model_ptr).feature_count;
-            CArrayIterator { ptr, count }
-        }
-    }
-*/
 
     pub fn transform(&self, frame: &RawFrame, nrow: usize, debug: bool) -> error::Result<()> {
         unsafe {
@@ -349,8 +350,7 @@ impl<'a> RawFrame<'a> {
 
     pub fn output_col(&self, output_index: usize) -> error::Result<RawColumnBuffer> {
         unsafe {
-            let data_type = self.lib.api.MOJO_Output_Type(self.pipeline_ptr, output_index);
-            //1587: (*self.pipeline_ptr).output_types.offset(output_index as isize).read()
+            let data_type = (*self.pipeline_ptr).output_types.offset(output_index as isize).read();
             match self.output_data(output_index) {
                 None => Err(error::MojoError::InvalidOutputIndex(output_index)),
                 Some(ptr) => Ok(RawColumnBuffer::new(self.lib, data_type, ptr)),
@@ -442,7 +442,7 @@ mod tests {
     use std::ffi::CStr;
     use std::path::Path;
 
-    use crate::daimojo_library::{MOJO_DataType, MOJO_Transform_Flags, MOJO_Transform_Flags_Type, RawPipeline};
+    use crate::daimojo_library::{MOJO_DataType, MOJO_Transform_Operations, MOJO_Transform_Operations_Type, RawPipeline};
 
     use super::{DaiMojoLibrary, RawModel};
 
@@ -469,7 +469,7 @@ mod tests {
         for (name, column_type) in features {
             println!("* {} : {:?}", name, column_type);
         }
-        let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as MOJO_Transform_Flags_Type).unwrap();
+        let pipeline = RawPipeline::new(&model, MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type).unwrap();
         // outputs
         let outputs: Vec<(Cow<str>, MOJO_DataType)> = pipeline.outputs().collect();
         println!("Outputs[{}]:", outputs.len());

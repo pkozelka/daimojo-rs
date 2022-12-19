@@ -5,7 +5,7 @@ use std::ffi::CStr;
 use std::process::ExitCode;
 use clap::{ArgAction, Parser, Subcommand};
 use log::LevelFilter;
-use daimojo::{DaiMojoLibrary, MOJO_Transform_Flags, MOJO_Transform_Flags_Type, RawModel, RawPipeline, MOJO_DataType};
+use daimojo::{DaiMojoLibrary, MOJO_Transform_Operations, MOJO_Transform_Operations_Type, RawModel, RawPipeline, MOJO_DataType};
 
 /// CLI for daimojo libraries
 #[derive(Parser)]
@@ -89,7 +89,7 @@ fn run() -> anyhow::Result<u8> {
         Commands::Predict {output, input, batch_size} => {
             let lib = load_library(&cli.lib)?;
             let model = load_model(&lib, &cli.mojo)?;
-            let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as MOJO_Transform_Flags_Type)?;
+            let pipeline = RawPipeline::new(&model, MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type)?;
             Ok(cmd_predict::cmd_predict(&pipeline, output, input, batch_size)?)
         }
     }
@@ -102,13 +102,14 @@ fn show_pipeline(lib: &DaiMojoLibrary, mojo: &str) -> anyhow::Result<u8> {
     let missing_values: Vec<Cow<str>> = model.missing_values()
         .map(CStr::to_string_lossy)
         .collect();
+    println!("* DAI version: {}", model.dai_version().to_string_lossy());
     println!("* Missing values[{}]: {}", missing_values.len(), missing_values.join(", "));
     let features: Vec<(Cow<str>, MOJO_DataType)> = model.features().collect();
     println!("Input features[{}]:", features.len());
     for (name, column_type) in features {
         println!("* '{name}': {column_type:?}");
     }
-    let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as MOJO_Transform_Flags_Type)?; //TODO
+    let pipeline = RawPipeline::new(&model, MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type)?; //TODO
     let outputs: Vec<(Cow<str>, MOJO_DataType)> = pipeline.outputs().collect();
     println!("Output columns[{}]:", outputs.len());
     for (name, column_type) in outputs {

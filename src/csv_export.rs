@@ -14,8 +14,8 @@ impl<'a> FrameExporter<'a> {
     pub fn init(pipeline: &RawPipeline, frame: &'a RawFrame) -> error::Result<Self> {
         let mut wtr = csv::Writer::from_writer(std::io::stdout());
         let mut ocols = Vec::new();
-        for (index, name) in pipeline.output_names().enumerate() {
-            wtr.write_field(&name.as_ref())?;
+        for (index, name) in pipeline.output_names_iter().enumerate() {
+            wtr.write_field(name.to_string_lossy().as_ref())?;
             // println!("Rust: output_data({index}='{}') -> {:X}", col.name, ptr as usize);
             ocols.push(frame.output_col(index)?);
         }

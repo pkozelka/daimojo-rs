@@ -1,7 +1,6 @@
 extern crate core;
 
-use std::borrow::Cow;
-use daimojo::{DaiMojoLibrary, FrameExporter, FrameImporter, MOJO_INT32_NAN, MOJO_Transform_Flags, MOJO_Transform_Flags_Type, RawFrame, RawModel, RawPipeline};
+use daimojo::{DaiMojoLibrary, FrameExporter, FrameImporter, MOJO_INT32_NAN, MOJO_Transform_Operations, MOJO_Transform_Operations_Type, RawFrame, RawModel, RawPipeline};
 use daimojo::MOJO_DataType::{MOJO_DOUBLE, MOJO_INT32};
 
 const LIB: &str = "libdaimojo.so";
@@ -29,8 +28,9 @@ fn simple_metadata() -> anyhow::Result<()> {
     assert_eq!(feature_names_expected, feature_names.as_slice());
 
     // pipeline
-    let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as MOJO_Transform_Flags_Type)?;
-    let output_names_expected: Vec<Cow<str>> = pipeline.output_names()
+    let pipeline = RawPipeline::new(&model, MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type)?;
+    let output_names_expected: Vec<&str> = pipeline.output_names_iter()
+        .map(|s| s.to_str().unwrap())
         .collect();
     assert_eq!(output_names_expected, &["v1", "v2"]);
     Ok(())
@@ -40,7 +40,7 @@ fn simple_metadata() -> anyhow::Result<()> {
 fn simple_predict_memory() -> anyhow::Result<()> {
     let lib = DaiMojoLibrary::load(LIB)?;
     let model = RawModel::load(&lib, SIMPLE_PIPELINE_MOJO, "")?;
-    let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as MOJO_Transform_Flags_Type)?;
+    let pipeline = RawPipeline::new(&model, MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type)?;
 
     // frame
     let frame = RawFrame::new(&pipeline, 3)?;
@@ -88,7 +88,7 @@ fn simple_predict_csv() -> anyhow::Result<()> {
     const INPUT_CSV: &str = "tests/data/transform_agg_sum_py.input.csv";
     let lib = DaiMojoLibrary::load(LIB)?;
     let model = RawModel::load(&lib, SIMPLE_PIPELINE_MOJO, "")?;
-    let pipeline = RawPipeline::new(&model, MOJO_Transform_Flags::PREDICT as MOJO_Transform_Flags_Type)?;
+    let pipeline = RawPipeline::new(&model, MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type)?;
 
     let frame = RawFrame::new(&pipeline, 3)?;
     let mut rdr = csv::Reader::from_path(INPUT_CSV)?;
