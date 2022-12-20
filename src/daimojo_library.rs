@@ -69,6 +69,7 @@ pub enum MOJO_DataType {
     MOJO_STRING = 6,
 }
 
+//TODO implement some convenient handling for this type
 #[allow(non_camel_case_types)]
 pub type MOJO_Transform_Operations_Type = u64;
 
@@ -179,6 +180,10 @@ impl<'a> RawModel<'a> {
                 return CStr::from_ptr(EMPTY_CSTR);
             }
             CStr::from_ptr(ptr) }
+    }
+
+    pub fn supported_ops(&self) ->MOJO_Transform_Operations_Type {
+        unsafe { (*self.model_ptr).supported_ops }
     }
 
     pub fn time_created_utc(&self) -> DateTime<Utc> {

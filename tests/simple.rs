@@ -19,6 +19,11 @@ fn simple_metadata() -> anyhow::Result<()> {
     // model
     let model = RawModel::load(&lib, SIMPLE_PIPELINE_MOJO, "")?;
     assert_eq!("c30815f6-f6cb-475d-9f32-64d4152bce2d", model.uuid().to_str()?);
+    assert_eq!("", model.dai_version().to_string_lossy());
+    let expected_ops =
+        MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type
+        | MOJO_Transform_Operations::CONTRIBS_RAW as MOJO_Transform_Operations_Type;
+    assert_eq!(expected_ops, model.supported_ops());
     let feature_types_expected = &[MOJO_INT32, MOJO_INT32, MOJO_INT32, MOJO_DOUBLE, MOJO_DOUBLE, MOJO_DOUBLE, ];
     assert_eq!(feature_types_expected, model.feature_types());
     let feature_names_expected = &["a", "a2", "a3", "b", "b2", "b3"];
