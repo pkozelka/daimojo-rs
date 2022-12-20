@@ -1,5 +1,7 @@
 extern crate core;
 
+use std::fmt::{Debug, Display, Formatter};
+use std::ops::Sub;
 use daimojo::{DaiMojoLibrary, FrameExporter, FrameImporter, MOJO_INT32_NAN, MOJO_Transform_Operations, MOJO_Transform_Operations_Type, RawFrame, RawModel, RawPipeline};
 use daimojo::MOJO_DataType::{MOJO_DOUBLE, MOJO_INT32};
 
@@ -126,4 +128,121 @@ fn simple_predict_csv() -> anyhow::Result<()> {
     // const OUTPUT_CSV: &str = "tests/data/transform_agg_sum_py.output.csv";
 
     Ok(())
+}
+
+#[derive(Clone,Copy,Default)]
+struct Ops(MOJO_Transform_Operations_Type);
+
+impl From<MOJO_Transform_Operations_Type> for Ops {
+    fn from(value: MOJO_Transform_Operations_Type) -> Self {
+        Ops(value)
+    }
+}
+
+impl From<Ops> for MOJO_Transform_Operations_Type {
+    fn from(value: Ops) -> Self {
+        value.0
+    }
+}
+
+impl Sub for Ops {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self(self.0 & !rhs.0)
+    }
+}
+
+impl Ops {
+    pub fn new() -> Self {
+        Ops(MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type)
+    }
+
+    pub fn predict(&self) -> bool {
+        self.0 & MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type > 0
+    }
+
+    pub fn interval(&self) -> bool {
+        self.0 & MOJO_Transform_Operations::INTERVAL as MOJO_Transform_Operations_Type > 0
+    }
+
+    pub fn contribs_raw(&self) -> bool {
+        self.0 & MOJO_Transform_Operations::CONTRIBS_RAW as MOJO_Transform_Operations_Type > 0
+    }
+
+    pub fn contribs_original(&self) -> bool {
+        self.0 & MOJO_Transform_Operations::CONTRIBS_ORIGINAL as MOJO_Transform_Operations_Type > 0
+    }
+
+    pub fn with_interval(self) -> Self {
+        Self(self.0 | MOJO_Transform_Operations::INTERVAL as MOJO_Transform_Operations_Type)
+    }
+
+    pub fn with_contribs_raw(self) -> Self {
+        Self(self.0 | MOJO_Transform_Operations::CONTRIBS_RAW as MOJO_Transform_Operations_Type)
+    }
+
+    pub fn with_contribs_original(self) -> Self {
+        Self(self.0 | MOJO_Transform_Operations::CONTRIBS_ORIGINAL as MOJO_Transform_Operations_Type)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0 == 0
+    }
+}
+
+impl Debug for Ops {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Ops{")?;
+        Display::fmt(self,f)?;
+        f.write_str("}")
+    }
+}
+
+impl Display for Ops {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        const SEP: &str = "|";
+        let mut sep = "";
+        if self.predict() {
+            f.write_str("PREDICT")?;
+            sep = SEP;
+        }
+        if self.interval() {
+            f.write_str(sep)?;
+            f.write_str("INTERVAL")?;
+            sep = SEP;
+        }
+        if self.contribs_raw() {
+            f.write_str(sep)?;
+            f.write_str("CONTRIBS_RAW")?;
+            sep = SEP;
+        }
+        if self.contribs_original() {
+            f.write_str(sep)?;
+            f.write_str("CONTRIBS_ORIGINAL")?;
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn test_ops() {
+    let all = Ops::new()
+        .with_interval()
+        .with_contribs_raw()
+        .with_contribs_original();
+
+    println!("ops all: {all}");
+    println!("ops default: {}", Ops::default());
+    println!("ops new: {}", Ops::new());
+
+    let supported = Ops::new().with_contribs_raw();
+    println!("ops supported: {supported}");
+    let unsupported = all - supported;
+    println!("ops unsupported: {unsupported}");
+    let requested = Ops::new().with_contribs_original();
+    println!("ops requested: {requested}");
+    let missing = requested - supported;
+    println!("ops unsupported: {missing}");
+    assert!(!missing.is_empty());
 }
