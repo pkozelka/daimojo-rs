@@ -40,10 +40,11 @@ pub const MOJO_INT64_NAN: i64 = i64::MAX;
 #[repr(C)]
 pub struct MOJO_Pipeline {
     model: *const MOJO_Model,
-    flags: MOJO_Transform_Operations_Type,
+    operations: MOJO_Transform_Operations_Type,
     output_count: usize,
     output_names: *const *const c_char,
     output_types: *const MOJO_DataType,
+    output_ops: *const MOJO_Transform_Operations_Type,
 }
 
 #[allow(non_camel_case_types)]
@@ -271,6 +272,15 @@ impl<'a> RawPipeline<'a> {
             &*slice_from_raw_parts(ptr, count)
         }
     }
+
+    pub fn output_ops(&self) -> &[MOJO_Transform_Operations_Type] {
+        unsafe {
+            let ptr = (*self.pipeline_ptr).output_ops;
+            let count = (*self.pipeline_ptr).output_count;
+            &*slice_from_raw_parts(ptr, count)
+        }
+    }
+
     pub fn output_names_iter(&'a self) -> impl Iterator<Item=&CStr> {
         unsafe {
             self.output_names().iter()
