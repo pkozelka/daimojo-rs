@@ -2,7 +2,7 @@
 
 pub use csv_export::FrameExporter;
 pub use csv_import::FrameImporter;
-pub use daimojo_library::{DaiMojoLibrary, MOJO_DataType, MOJO_INT32_NAN, MOJO_INT64_NAN, MOJO_Transform_Operations, MOJO_Transform_Operations_Type};
+pub use daimojo_library::{DaiMojoLibrary, MOJO_DataType, MOJO_INT32_NAN, MOJO_INT64_NAN, MOJO_Transform_Ops};
 pub use daimojo_library::{RawFrame, RawModel, RawPipeline};
 pub use error::{MojoError, Result};
 
@@ -16,7 +16,7 @@ mod error;
 mod tests {
     use std::path::Path;
 
-    use crate::daimojo_library::{DaiMojoLibrary, MOJO_Transform_Operations, MOJO_Transform_Operations_Type, RawFrame, RawModel, RawPipeline};
+    use crate::daimojo_library::{DaiMojoLibrary, MOJO_Transform_Ops, RawFrame, RawModel, RawPipeline};
     use crate::error;
 
     // const LIBDAIMOJO_SO: &str = "lib/linux_x64/libdaimojo.so";
@@ -30,7 +30,7 @@ mod tests {
         let model = RawModel::load(&lib, "data/iris/pipeline.mojo", "")?;
         println!("Pipeline UUID: {}", model.uuid().to_string_lossy());
         println!("Time created: {}", model.time_created_utc());
-        let pipeline = RawPipeline::new(&model, MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type)?;
+        let pipeline = RawPipeline::new(&model, MOJO_Transform_Ops::PREDICT as MOJO_Transform_Ops)?;
         let mut frame = RawFrame::new(&pipeline, 1)?;
         // fill input columns
         frame.input_f32_mut(0, /*"sepal_len"*/)?[0] = 5.1;
@@ -60,7 +60,7 @@ mod tests {
         let model = RawModel::load(&lib, "data/wine/pipeline.mojo", "")?;
         println!("Pipeline UUID: {}", model.uuid().to_string_lossy());
         println!("Time created: {}", model.time_created_utc());
-        let pipeline = RawPipeline::new(&model, MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type)?;
+        let pipeline = RawPipeline::new(&model, MOJO_Transform_Ops::PREDICT as MOJO_Transform_Ops)?;
         let mut frame = RawFrame::new(&pipeline, 5)?;
         // fill input columns
         let fixed_acidity = frame.input_f32_mut(0/*"fixed acidity"*/).unwrap();

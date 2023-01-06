@@ -1,8 +1,6 @@
 extern crate core;
 
-use std::fmt::{Debug, Display, Formatter};
-use std::ops::Sub;
-use daimojo::{DaiMojoLibrary, FrameExporter, FrameImporter, MOJO_INT32_NAN, MOJO_Transform_Operations, MOJO_Transform_Operations_Type, RawFrame, RawModel, RawPipeline};
+use daimojo::{DaiMojoLibrary, FrameExporter, FrameImporter, MOJO_INT32_NAN, MOJO_Transform_Ops, RawFrame, RawModel, RawPipeline};
 use daimojo::MOJO_DataType::{MOJO_DOUBLE, MOJO_INT32};
 
 const LIB: &str = "libdaimojo.so";
@@ -23,8 +21,8 @@ fn simple_metadata() -> anyhow::Result<()> {
     assert_eq!("c30815f6-f6cb-475d-9f32-64d4152bce2d", model.uuid().to_str()?);
     assert_eq!("", model.dai_version().to_string_lossy());
     let expected_ops =
-        MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type
-        | MOJO_Transform_Operations::CONTRIBS_RAW as MOJO_Transform_Operations_Type;
+        MOJO_Transform_Ops::PREDICT as MOJO_Transform_Ops
+        | MOJO_Transform_Ops::CONTRIBS_RAW as MOJO_Transform_Ops;
     assert_eq!(expected_ops, model.supported_ops());
     let feature_types_expected = &[MOJO_INT32, MOJO_INT32, MOJO_INT32, MOJO_DOUBLE, MOJO_DOUBLE, MOJO_DOUBLE, ];
     assert_eq!(feature_types_expected, model.feature_types());
@@ -35,7 +33,7 @@ fn simple_metadata() -> anyhow::Result<()> {
     assert_eq!(feature_names_expected, feature_names.as_slice());
 
     // pipeline
-    let pipeline = RawPipeline::new(&model, MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type)?;
+    let pipeline = RawPipeline::new(&model, MOJO_Transform_Ops::PREDICT as MOJO_Transform_Ops)?;
     let output_names_expected: Vec<&str> = pipeline.output_names_iter()
         .map(|s| s.to_str().unwrap())
         .collect();
@@ -47,7 +45,7 @@ fn simple_metadata() -> anyhow::Result<()> {
 fn simple_predict_memory() -> anyhow::Result<()> {
     let lib = DaiMojoLibrary::load(LIB)?;
     let model = RawModel::load(&lib, SIMPLE_PIPELINE_MOJO, "")?;
-    let pipeline = RawPipeline::new(&model, MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type)?;
+    let pipeline = RawPipeline::new(&model, MOJO_Transform_Ops::PREDICT as MOJO_Transform_Ops)?;
 
     // frame
     let frame = RawFrame::new(&pipeline, 3)?;
@@ -95,7 +93,7 @@ fn simple_predict_csv() -> anyhow::Result<()> {
     const INPUT_CSV: &str = "tests/data/transform_agg_sum_py.input.csv";
     let lib = DaiMojoLibrary::load(LIB)?;
     let model = RawModel::load(&lib, SIMPLE_PIPELINE_MOJO, "")?;
-    let pipeline = RawPipeline::new(&model, MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type)?;
+    let pipeline = RawPipeline::new(&model, MOJO_Transform_Ops::PREDICT as MOJO_Transform_Ops)?;
 
     let frame = RawFrame::new(&pipeline, 3)?;
     let mut rdr = csv::Reader::from_path(INPUT_CSV)?;
@@ -128,121 +126,4 @@ fn simple_predict_csv() -> anyhow::Result<()> {
     // const OUTPUT_CSV: &str = "tests/data/transform_agg_sum_py.output.csv";
 
     Ok(())
-}
-
-#[derive(Clone,Copy,Default)]
-struct Ops(MOJO_Transform_Operations_Type);
-
-impl From<MOJO_Transform_Operations_Type> for Ops {
-    fn from(value: MOJO_Transform_Operations_Type) -> Self {
-        Ops(value)
-    }
-}
-
-impl From<Ops> for MOJO_Transform_Operations_Type {
-    fn from(value: Ops) -> Self {
-        value.0
-    }
-}
-
-impl Sub for Ops {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self(self.0 & !rhs.0)
-    }
-}
-
-impl Ops {
-    pub fn new() -> Self {
-        Ops(MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type)
-    }
-
-    pub fn predict(&self) -> bool {
-        self.0 & MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type > 0
-    }
-
-    pub fn interval(&self) -> bool {
-        self.0 & MOJO_Transform_Operations::INTERVAL as MOJO_Transform_Operations_Type > 0
-    }
-
-    pub fn contribs_raw(&self) -> bool {
-        self.0 & MOJO_Transform_Operations::CONTRIBS_RAW as MOJO_Transform_Operations_Type > 0
-    }
-
-    pub fn contribs_original(&self) -> bool {
-        self.0 & MOJO_Transform_Operations::CONTRIBS_ORIGINAL as MOJO_Transform_Operations_Type > 0
-    }
-
-    pub fn with_interval(self) -> Self {
-        Self(self.0 | MOJO_Transform_Operations::INTERVAL as MOJO_Transform_Operations_Type)
-    }
-
-    pub fn with_contribs_raw(self) -> Self {
-        Self(self.0 | MOJO_Transform_Operations::CONTRIBS_RAW as MOJO_Transform_Operations_Type)
-    }
-
-    pub fn with_contribs_original(self) -> Self {
-        Self(self.0 | MOJO_Transform_Operations::CONTRIBS_ORIGINAL as MOJO_Transform_Operations_Type)
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0 == 0
-    }
-}
-
-impl Debug for Ops {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Ops{")?;
-        Display::fmt(self,f)?;
-        f.write_str("}")
-    }
-}
-
-impl Display for Ops {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        const SEP: &str = "|";
-        let mut sep = "";
-        if self.predict() {
-            f.write_str("PREDICT")?;
-            sep = SEP;
-        }
-        if self.interval() {
-            f.write_str(sep)?;
-            f.write_str("INTERVAL")?;
-            sep = SEP;
-        }
-        if self.contribs_raw() {
-            f.write_str(sep)?;
-            f.write_str("CONTRIBS_RAW")?;
-            sep = SEP;
-        }
-        if self.contribs_original() {
-            f.write_str(sep)?;
-            f.write_str("CONTRIBS_ORIGINAL")?;
-        }
-        Ok(())
-    }
-}
-
-#[test]
-fn test_ops() {
-    let all = Ops::new()
-        .with_interval()
-        .with_contribs_raw()
-        .with_contribs_original();
-
-    println!("ops all: {all}");
-    println!("ops default: {}", Ops::default());
-    println!("ops new: {}", Ops::new());
-
-    let supported = Ops::new().with_contribs_raw();
-    println!("ops supported: {supported}");
-    let unsupported = all - supported;
-    println!("ops unsupported: {unsupported}");
-    let requested = Ops::new().with_contribs_original();
-    println!("ops requested: {requested}");
-    let missing = requested - supported;
-    println!("ops unsupported: {missing}");
-    assert!(!missing.is_empty());
 }

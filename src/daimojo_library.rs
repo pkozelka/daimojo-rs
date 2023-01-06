@@ -9,6 +9,7 @@ use std::mem::transmute;
 use std::os::raw::c_char;
 use std::path::Path;
 use std::ptr::slice_from_raw_parts;
+use bitflags::bitflags;
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 use dlopen2::wrapper::{Container, WrapperApi};
@@ -19,7 +20,7 @@ use crate::error;
 #[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct MOJO_Model {
-    supported_ops: MOJO_Transform_Operations_Type,
+    supported_ops: MOJO_Transform_Ops,
     is_valid: bool,
     uuid: *const c_char,
     dai_version: *const c_char,
@@ -40,11 +41,11 @@ pub const MOJO_INT64_NAN: i64 = i64::MAX;
 #[repr(C)]
 pub struct MOJO_Pipeline {
     model: *const MOJO_Model,
-    operations: MOJO_Transform_Operations_Type,
+    operations: MOJO_Transform_Ops,
     output_count: usize,
     output_names: *const *const c_char,
     output_types: *const MOJO_DataType,
-    output_ops: *const MOJO_Transform_Operations_Type,
+    output_ops: *const MOJO_Transform_Ops,
 }
 
 #[allow(non_camel_case_types)]
@@ -53,7 +54,7 @@ pub struct MOJO_Frame {}
 #[allow(dead_code)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
-#[derive(Copy,Clone,Debug,Eq,PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum MOJO_DataType {
     MOJO_UNKNOWN = 0,
     /// [i8] byte-represented boolean, 0=false, 1=true, NA is not defined
@@ -71,21 +72,19 @@ pub enum MOJO_DataType {
 }
 
 //TODO implement some convenient handling for this type
-#[allow(non_camel_case_types)]
-pub type MOJO_Transform_Operations_Type = u64;
-
-#[allow(non_camel_case_types)]
-#[repr(C)]
-#[derive(Copy,Clone,Debug)]
-pub enum MOJO_Transform_Operations {
-    /// normal prediction
-    PREDICT = 1 << 0,
-    /// prediction interval
-    INTERVAL = 1 << 1,
-    /// SHAP values
-    CONTRIBS_RAW = 1 << 2,
-    /// SHAP values mapped to original features
-    CONTRIBS_ORIGINAL = 1 << 3,
+bitflags! {
+    #[allow(non_camel_case_types)]
+    #[repr(C)]
+    pub struct MOJO_Transform_Ops: u64 {
+        /// normal prediction
+        const PREDICT = 1 << 0;
+        /// prediction interval
+        const INTERVAL = 1 << 1;
+        /// SHAP values
+        const CONTRIBS_RAW = 1 << 2;
+        /// SHAP values mapped to original features
+        const CONTRIBS_ORIGINAL = 1 << 3;
+    }
 }
 
 #[derive(dlopen2_derive::WrapperApi)]
@@ -100,7 +99,7 @@ pub struct DaiMojoBindings {
     MOJO_NewModel: unsafe extern "C" fn(filename: *const c_char, tf_lib_prefix: *const c_char) -> *const MOJO_Model,
     MOJO_DeleteModel: unsafe extern "C" fn(mojo_model: *const MOJO_Model),
     // Pipeline
-    MOJO_NewPipeline: unsafe extern "C" fn(mojo_model: *const MOJO_Model, flags: MOJO_Transform_Operations_Type) -> *const MOJO_Pipeline,
+    MOJO_NewPipeline: unsafe extern "C" fn(mojo_model: *const MOJO_Model, flags: MOJO_Transform_Ops) -> *const MOJO_Pipeline,
     MOJO_DeletePipeline: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline),
     MOJO_Transform: unsafe extern "C" fn(pipeline: *const MOJO_Pipeline, frame: *const MOJO_Frame, nrow: usize, debug: bool),
     // Frame
@@ -120,7 +119,6 @@ pub struct DaiMojoLibrary {
 }
 
 impl DaiMojoLibrary {
-
     pub fn load<P: AsRef<Path>>(libfile: P) -> error::Result<Self> {
         let libfile = libfile.as_ref().canonicalize()?;
         let libfile = libfile.to_str().expect(&format!("Not a valid unicode pathname: {}", libfile.to_string_lossy()));
@@ -135,7 +133,7 @@ impl DaiMojoLibrary {
         // TODO: isn't there a way to avoid loading again?
         let container = unsafe { Container::load(libfile) };
         let api = container?;
-        Ok(Self { api, version: version.to_string()})
+        Ok(Self { api, version: version.to_string() })
     }
 
     pub fn version(&self) -> Cow<str> {
@@ -160,7 +158,7 @@ impl<'a> RawModel<'a> {
         if model_ptr.is_null() {
             return Err(std::io::Error::new(ErrorKind::NotFound, format!("File not found: {}", filename.to_string_lossy())));
         }
-        Ok(Self { lib, model_ptr, })
+        Ok(Self { lib, model_ptr })
     }
 
     #[inline]
@@ -180,10 +178,11 @@ impl<'a> RawModel<'a> {
                 log::error!("DAI version is null!");
                 return CStr::from_ptr(EMPTY_CSTR);
             }
-            CStr::from_ptr(ptr) }
+            CStr::from_ptr(ptr)
+        }
     }
 
-    pub fn supported_ops(&self) ->MOJO_Transform_Operations_Type {
+    pub fn supported_ops(&self) -> MOJO_Transform_Ops {
         unsafe { (*self.model_ptr).supported_ops }
     }
 
@@ -234,7 +233,7 @@ impl<'a> RawModel<'a> {
     }
 }
 
-impl <'a> Drop for RawModel<'a> {
+impl<'a> Drop for RawModel<'a> {
     fn drop(&mut self) {
         log::trace!("calling MOJO_DeleteModel()");
         unsafe { self.lib.api.MOJO_DeleteModel(self.model_ptr) }
@@ -248,7 +247,7 @@ pub struct RawPipeline<'a> {
 }
 
 impl<'a> RawPipeline<'a> {
-    pub fn new(model: &'a RawModel, flags: MOJO_Transform_Operations_Type) -> error::Result<Self> {
+    pub fn new(model: &'a RawModel, flags: MOJO_Transform_Ops) -> error::Result<Self> {
         let pipeline_ptr = unsafe { model.lib.api.MOJO_NewPipeline(model.model_ptr, flags) };
         Ok(Self {
             lib: model.lib,
@@ -273,7 +272,7 @@ impl<'a> RawPipeline<'a> {
         }
     }
 
-    pub fn output_ops(&self) -> &[MOJO_Transform_Operations_Type] {
+    pub fn output_ops(&self) -> &[MOJO_Transform_Ops] {
         unsafe {
             let ptr = (*self.pipeline_ptr).output_ops;
             let count = (*self.pipeline_ptr).output_count;
@@ -359,7 +358,6 @@ impl<'a> RawFrame<'a> {
                 None => Err(error::MojoError::InvalidInputIndex(feature_index)),
                 Some(ptr) => Ok(RawColumnBuffer::new(self.lib, data_type, ptr))
             }
-
         }
     }
 
@@ -404,13 +402,12 @@ pub struct RawColumnBuffer<'a> {
 }
 
 impl<'a> RawColumnBuffer<'a> {
-
     fn new(lib: &'a DaiMojoLibrary, data_type: MOJO_DataType, ptr: *const u8) -> Self {
         Self {
             lib,
             data_type,
             array_start: ptr,
-            current: ptr as *mut u8
+            current: ptr as *mut u8,
         }
     }
 
@@ -443,7 +440,7 @@ impl<'a> RawColumnBuffer<'a> {
         }
     }
 
-    pub fn unchecked_read_string(&mut self, row: usize) -> Cow<str>{
+    pub fn unchecked_read_string(&mut self, row: usize) -> Cow<str> {
         unsafe {
             let value = self.lib.api.MOJO_Column_Read_Str(self.array_start as *mut u8, row);
             CStr::from_ptr(value).to_string_lossy()
@@ -457,7 +454,7 @@ mod tests {
     use std::ffi::CStr;
     use std::path::Path;
 
-    use crate::daimojo_library::{MOJO_DataType, MOJO_Transform_Operations, MOJO_Transform_Operations_Type, RawPipeline};
+    use crate::daimojo_library::{MOJO_DataType, MOJO_Transform_Ops, RawPipeline};
 
     use super::{DaiMojoLibrary, RawModel};
 
@@ -484,7 +481,7 @@ mod tests {
         for (name, column_type) in features {
             println!("* {} : {:?}", name, column_type);
         }
-        let pipeline = RawPipeline::new(&model, MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type).unwrap();
+        let pipeline = RawPipeline::new(&model, MOJO_Transform_Ops::PREDICT as MOJO_Transform_Ops).unwrap();
         // outputs
         let outputs: Vec<(Cow<str>, MOJO_DataType)> = pipeline.outputs().collect();
         println!("Outputs[{}]:", outputs.len());

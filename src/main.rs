@@ -5,7 +5,7 @@ use std::ffi::CStr;
 use std::process::ExitCode;
 use clap::{ArgAction, Parser, Subcommand};
 use log::LevelFilter;
-use daimojo::{DaiMojoLibrary, MOJO_Transform_Operations, MOJO_Transform_Operations_Type, RawModel, RawPipeline, MOJO_DataType};
+use daimojo::{DaiMojoLibrary, MOJO_Transform_Ops, RawModel, RawPipeline, MOJO_DataType};
 
 /// CLI for daimojo libraries
 #[derive(Parser)]
@@ -89,7 +89,7 @@ fn run() -> anyhow::Result<u8> {
         Commands::Predict {output, input, batch_size} => {
             let lib = load_library(&cli.lib)?;
             let model = load_model(&lib, &cli.mojo)?;
-            let pipeline = RawPipeline::new(&model, MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type)?;
+            let pipeline = RawPipeline::new(&model, MOJO_Transform_Ops::PREDICT as MOJO_Transform_Ops)?;
             Ok(cmd_predict::cmd_predict(&pipeline, output, input, batch_size)?)
         }
     }
@@ -109,7 +109,7 @@ fn show_pipeline(lib: &DaiMojoLibrary, mojo: &str) -> anyhow::Result<u8> {
     for (name, column_type) in features {
         println!("* '{name}': {column_type:?}");
     }
-    let pipeline = RawPipeline::new(&model, MOJO_Transform_Operations::PREDICT as MOJO_Transform_Operations_Type)?; //TODO
+    let pipeline = RawPipeline::new(&model, MOJO_Transform_Ops::PREDICT as MOJO_Transform_Ops)?; //TODO
     let outputs: Vec<(Cow<str>, MOJO_DataType)> = pipeline.outputs().collect();
     println!("Output columns[{}]:", outputs.len());
     for (name, column_type) in outputs {
