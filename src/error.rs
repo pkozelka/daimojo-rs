@@ -11,7 +11,9 @@ pub enum MojoError {
     CsvError(#[from] csv::Error),
     #[error("DlOpen Error")]
     DlOpenError(#[from] dlopen2::Error),
-    #[error("Pipeline is not valid - check your license settings")]
+    #[error("Pipeline model is not valid - check your license settings")]
+    InvalidModel,
+    #[error("Cannot create pipeline")]
     InvalidPipeline,
     #[error("Null Error")]
     NulError(#[from] NulError),

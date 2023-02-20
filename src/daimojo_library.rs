@@ -15,7 +15,7 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use dlopen2::wrapper::{Container, WrapperApi};
 
 use crate::carray::{CArrayIterator, CTwinArrayIterator, pchar_to_cowstr};
-use crate::error;
+use crate::{error, MojoError};
 
 #[allow(non_camel_case_types)]
 #[repr(C)]
@@ -249,6 +249,9 @@ pub struct RawPipeline<'a> {
 impl<'a> RawPipeline<'a> {
     pub fn new(model: &'a RawModel, flags: MOJO_Transform_Ops) -> error::Result<Self> {
         let pipeline_ptr = unsafe { model.lib.api.MOJO_NewPipeline(model.model_ptr, flags) };
+        if pipeline_ptr.is_null() {
+            return Err(MojoError::InvalidPipeline)
+        }
         Ok(Self {
             lib: model.lib,
             pipeline_ptr,
